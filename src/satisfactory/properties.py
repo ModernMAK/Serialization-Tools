@@ -92,16 +92,20 @@ class IntProperty(Property):
 
 @dataclass
 class StructProperty(Property):
-    unks: bytes
+    a: int
+    b: int
+    c: int
+    d: int
+    e: bytes
     structure: Structure
 
     @classmethod
     def unpack(cls, stream: BinaryIO, build_version: int) -> 'StructProperty':
         with StructIO(stream, str_null_terminated=True) as reader:
             sub_type = reader.unpack_len_encoded_str()
-            unks = reader.read(4 * 4 + 1)
+            a, b, c, d, e = reader.unpack("=4I c")
             structure = Structure.unpack_as_type(stream, build_version, sub_type)
-            return StructProperty(None, None, None, None, unks, structure)
+            return StructProperty(None, None, None, None, a, b, c, d, e, structure)
 
 
 @dataclass
@@ -110,11 +114,11 @@ class NameProperty(Property):
     value: str
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int) -> 'StructProperty':
+    def unpack(cls, stream: BinaryIO, build_version: int) -> 'NameProperty':
         with StructIO(stream, str_null_terminated=True) as reader:
             unks = reader.read(1)
             name = reader.unpack_len_encoded_str()
-            return StructProperty(None, None, None, None, unks, name)
+            return NameProperty(None, None, None, None, unks, name)
 
 
 _unpack_map: Dict[PropertyType, Callable[[BinaryIO, int], Property]] = {

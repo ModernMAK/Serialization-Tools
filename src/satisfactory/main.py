@@ -61,8 +61,6 @@ class WorldObject:
             return WorldObject(type, name, property_type, value, data)
 
 
-
-
 @dataclass
 class WorldCollectedObject:
     @classmethod
@@ -89,11 +87,17 @@ class SaveBody:
                 assert now + data_size == then, (now + data_size, then)
 
             world_object_count = reader.unpack(UInt32)
-            world_objects = [WorldObject.unpack(stream) for _ in range(world_object_count)]
+
+            world_objects = []
+            for _ in range(world_object_count):
+                world_objects.append(WorldObject.unpack(stream))
 
             world_objects_property_count = reader.unpack(UInt32)
             assert world_objects_property_count == world_object_count
-            world_objects_properties = [WorldObjectProperties.unpack(stream, header.build_version) for _ in range(world_objects_property_count)]
+
+            world_objects_properties = []
+            for _ in range(world_objects_property_count):
+                world_objects_properties.append(WorldObjectProperties.unpack(stream, header.build_version))
 
             world_collected_object_count = reader.unpack(UInt32)
             world_collected_objects = [WorldCollectedObject.unpack(stream) for _ in range(world_collected_object_count)]

@@ -174,7 +174,7 @@ class GuidStructure(Structure):
     data: bytes
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int) -> 'FluidBoxStructure':
+    def unpack(cls, stream: BinaryIO, build_version: int) -> 'GuidStructure':
         data = stream.read(16)
         return GuidStructure(None,data)
 
