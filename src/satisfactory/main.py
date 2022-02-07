@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import BinaryIO, List
 
-from main import StructIO, UInt32
-from satisfactory.properties import Property
+from satisfactory.properties import WorldObjectProperties
+from structio import StructIO, UInt32
 
 save_file = r"E:\Downloads" + r"\\" + r"waiting_for_coal_research.sav"
 StructIO.str_null_terminated_default = True
@@ -74,7 +74,7 @@ class WorldCollectedObject:
 class SaveBody:
     data_size: int
     world_objects: List[WorldObject]
-    world_objects_properties: List[WorldObjectProperty]
+    world_objects_properties: List[WorldObjectProperties]
     world_collected_objects: List[WorldCollectedObject]
 
     @classmethod
@@ -93,7 +93,7 @@ class SaveBody:
 
             world_objects_property_count = reader.unpack(UInt32)
             assert world_objects_property_count == world_object_count
-            world_objects_properties = [WorldObjectProperty.unpack(stream, header.build_version) for _ in range(world_objects_property_count)]
+            world_objects_properties = [WorldObjectProperties.unpack(stream, header.build_version) for _ in range(world_objects_property_count)]
 
             world_collected_object_count = reader.unpack(UInt32)
             world_collected_objects = [WorldCollectedObject.unpack(stream) for _ in range(world_collected_object_count)]

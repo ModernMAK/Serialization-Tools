@@ -27,6 +27,10 @@ class StructIO:
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
+    def EOS(self) -> bool:
+        with self.bookmark():
+            return len(self.read(1)) == 0
+
     def read(self, n: int = ...) -> bytes:
         return self.stream.read(n)
 
@@ -38,6 +42,10 @@ class StructIO:
 
     def tell(self) -> int:
         return self.stream.tell()
+
+    @contextmanager
+    def window(self, start: int = None, end: int = None, size: int = None):
+        yield Window(self.stream, start, end, size, str_null_terminated=self._str_null_terminated)
 
     @contextmanager
     def bookmark(self):
@@ -95,6 +103,7 @@ class StructIO:
         return written
 
     def unpack_len_encoded_str(self, length_layout: StructAble = UInt32, encoding: str = None, errors: str = None, null_terminated: bool = None) -> str:
+        null_terminated = null_terminated or self._str_null_terminated
         length_layout = self._parse_struct(length_layout)
         count: int = self.unpack(length_layout)
         bm = self.tell()
@@ -140,3 +149,31 @@ class StructIO:
     @classmethod
     def _parse_struct(cls, layout: StructAble) -> Struct:
         return layout if isinstance(layout, Struct) else Struct(layout)
+
+
+class Window(StructIO):
+    @classmethod
+    def __parse_start_end_size(cls, now: int, start: int = None, end: int = None, size: int = None) -> Tuple[int, int]:
+        if start:
+            if end and size:
+                raise NotImplementedError
+            elif end:
+                return start, end - start
+            elif size:
+                return start, size
+            else:
+                raise NotImplementedError
+        elif end:
+            if size:
+                return end - size, size
+            else:
+                return 0, end
+        elif size:
+            return now, size
+        else:
+            raise NotImplementedError
+
+    def __init__(self, stream: BinaryIO, start: int = None, end: int = None, size: int = None, str_null_terminated: bool = None):
+        super(Window, self).__init__(stream, str_null_terminated)
+        start, size = self.__parse_start_end_size(stream.tell(), start, end, size)
+
