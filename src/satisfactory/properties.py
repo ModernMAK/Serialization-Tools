@@ -65,6 +65,10 @@ class Property:
 
                 return property
 
+    @classmethod
+    def unpack_element(cls, stream: BinaryIO, build_version: int) -> 'Property':
+        raise NotImplementedError
+
 
 @dataclass
 class FloatProperty(Property):
@@ -77,6 +81,10 @@ class FloatProperty(Property):
             flag, value = reader.unpack("=c f")
             return FloatProperty(None, None, None, None, flag, value)
 
+    @classmethod
+    def unpack_element(cls, stream: BinaryIO, build_version: int) -> 'FloatProperty':
+        raise NotImplementedError
+
 
 @dataclass
 class IntProperty(Property):
@@ -87,7 +95,13 @@ class IntProperty(Property):
     def unpack(cls, stream: BinaryIO, build_version: int) -> 'IntProperty':
         with StructIO(stream) as reader:
             flag, value = reader.unpack("=c i")
-            return IntProperty(None, None, None, None, flag, value)
+            return IntProperty(None, PropertyType.Int, None, None, flag, value)
+
+    @classmethod
+    def unpack_element(cls, stream: BinaryIO, build_version: int) -> 'IntProperty':
+        with StructIO(stream) as reader:
+            value = reader.unpack("i")
+            return IntProperty(None, PropertyType.Int, None, None, None, value)
 
 
 @dataclass
@@ -107,6 +121,33 @@ class StructProperty(Property):
             structure = Structure.unpack_as_type(stream, build_version, sub_type)
             return StructProperty(None, None, None, None, a, b, c, d, e, structure)
 
+    @classmethod
+    def unpack_element(cls, stream: BinaryIO, build_version: int) -> 'StructProperty':
+        raise NotImplementedError
+
+    @classmethod
+    def unpack_array(cls, stream: BinaryIO, build_version: int, count: int) -> 'List[StructProperty]':
+        with StructIO(stream, str_null_terminated=True) as reader:
+            name = reader.unpack_len_encoded_str()
+            assert name != str_NONE
+
+            type = reader.unpack_len_encoded_str()
+            parsed_type = PropertyType.parse(type)
+            assert parsed_type == PropertyType.Struct
+
+            size, index = reader.unpack("2I")
+
+            sub_type = reader.unpack_len_encoded_str()
+
+            a, b, c, d, e = reader.unpack("=4I c")
+
+            items = []
+            for i in range(count):
+                structure = Structure.unpack_as_type(stream, build_version, sub_type)
+                prop = StructProperty(name, parsed_type, size, index, a, b, c, d, e, structure)
+                items.append(prop)
+            return items
+
 
 @dataclass
 class NameProperty(Property):
@@ -120,28 +161,74 @@ class NameProperty(Property):
             name = reader.unpack_len_encoded_str()
             return NameProperty(None, None, None, None, unks, name)
 
+    @classmethod
+    def unpack_element(cls, stream: BinaryIO, build_version: int) -> 'NameProperty':
+        raise NotImplementedError
+
+
+@dataclass
+class ArrayProperty(Property):
+    unks: bytes
+    values: List
+
+    @classmethod
+    def unpack(cls, stream: BinaryIO, build_version: int) -> 'ArrayProperty':
+        with StructIO(stream, str_null_terminated=True) as reader:
+            sub_type = reader.unpack_len_encoded_str()
+            parsed_type = PropertyType.parse(sub_type)
+            a = reader.unpack("c")
+            count = reader.unpack("I")
+            array_unpacker = _unpack_array_map.get(parsed_type)
+            element_unpacker = _unpack_element_map.get(parsed_type)
+            if array_unpacker:
+                items = array_unpacker(stream, build_version, count)
+            elif element_unpacker:
+                items = []
+                for i in range(count):
+                    item = element_unpacker(stream, build_version)
+                    item.name = f"Element {i}"
+                    items.append(item)
+            else:
+                raise NotImplementedError
+
+            return ArrayProperty(None, None, None, None, a, items)
+
+    @classmethod
+    def unpack_element(cls, stream: BinaryIO, build_version: int) -> 'ArrayProperty':
+        raise NotImplementedError
+
 
 _unpack_map: Dict[PropertyType, Callable[[BinaryIO, int], Property]] = {
     PropertyType.Int: IntProperty.unpack,
     PropertyType.Float: FloatProperty.unpack,
     PropertyType.Struct: StructProperty.unpack,
-    PropertyType.Name: NameProperty.unpack
+    PropertyType.Name: NameProperty.unpack,
+    PropertyType.Array: ArrayProperty.unpack
+}
+_unpack_element_map: Dict[PropertyType, Callable[[BinaryIO, int], Property]] = {
+    PropertyType.Int: IntProperty.unpack_element,
+    PropertyType.Float: FloatProperty.unpack_element,
+    PropertyType.Struct: StructProperty.unpack_element,
+    PropertyType.Name: NameProperty.unpack_element,
+    PropertyType.Array: ArrayProperty.unpack_element
+}
+_unpack_array_map: Dict[PropertyType, Callable[[BinaryIO, int, int], List[Property]]] = {
+    PropertyType.Struct: StructProperty.unpack_array,
 }
 
 
 @dataclass
 class WorldObjectProperties:
-    len: int
-    unk: bytes
     properties: List[Property]
+    zero: int
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int) -> 'WorldObjectProperties':
+    def unpack(cls, stream: BinaryIO, build_version: int, size: int = None) -> 'WorldObjectProperties':
         # Enforce null terminated for this particular run regardless of previous settings
         with StructIO(stream) as reader:
-            now = reader.tell()
-            size = reader.unpack(UInt32)
-            unk = reader.read(12)
+            if not size:
+                read_size = size = reader.unpack("I")
+            bm = reader.tell()
             properties = []
             while True:
                 prop = Property.unpack(stream, build_version)
@@ -149,6 +236,6 @@ class WorldObjectProperties:
                     properties.append(prop)
                 else:
                     break
-            then = reader.tell()
-            assert now + size == then, (now + size, then, then - (now + size))
-        return WorldObjectProperties(size, unk, properties)
+            zero = reader.unpack("I")
+            assert bm + size == stream.tell(), (bm, size, stream.tell(), stream.tell() - (bm + size))
+        return WorldObjectProperties(properties, zero)

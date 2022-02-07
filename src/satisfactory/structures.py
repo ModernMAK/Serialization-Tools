@@ -51,7 +51,23 @@ class Vector4(Vector3):
         with StructIO(stream) as writer:
             return writer.pack("4f", (self.x, self.y, self.z, self.w))
 
+@dataclass
+class ObjectReference:
+    level:str
+    path:str
 
+    @classmethod
+    def unpack(cls, stream: BinaryIO, build_version: int = None) -> 'ObjectReference':
+        with StructIO(stream) as reader:
+            level = reader.unpack_len_encoded_str()
+            path = reader.unpack_len_encoded_str()
+            return ObjectReference(level,path)
+
+    def pack(self, stream: BinaryIO) -> int:
+        with StructIO(stream) as writer:
+            written = writer.pack_len_encoded_str(self.level)
+            written += writer.pack_len_encoded_str(self.path)
+            return written
 @dataclass
 class Color32:
     r: int

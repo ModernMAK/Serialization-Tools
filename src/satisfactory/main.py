@@ -1,9 +1,11 @@
+import os
 import zlib
 from dataclasses import dataclass
 from io import BytesIO
 from typing import BinaryIO, List
 
 from satisfactory.properties import WorldObjectProperties
+from satisfactory.structures import Vector4, Vector3, ObjectReference
 from structio import StructIO, UInt32
 
 save_file = r"E:\Downloads" + r"\\" + r"waiting_for_coal_research.sav"
@@ -43,8 +45,7 @@ class WorldObject:
     name: str
     property_type: str
     value: str
-    # index: int
-    data: bytes
+    properties: WorldObjectProperties
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'WorldObject':
@@ -52,13 +53,65 @@ class WorldObject:
             type = reader.unpack(UInt32)
             name, property_type, value = [reader.unpack_len_encoded_str() for _ in range(3)]
             # index = reader.unpack(UInt32)
+
             if type == 0:
-                data = reader.unpack_len_encoded_bytes()
+                data = reader.unpack_len_encoded_str()
+                return StrWorldObject(type, name, property_type, value, None, data)
             elif type == 1:
-                data = reader.read(16 * 3)
+                obj = DataWorldObject.unpack(stream)
             else:
                 raise ValueError()
-            return WorldObject(type, name, property_type, value, data)
+            obj.type = type
+            obj.name = name
+            obj.property_type = property_type
+            obj.value = value
+            return obj
+
+    def read_properties(self, stream: BinaryIO, build_version: int):
+        self.properties = WorldObjectProperties.unpack(stream, build_version)
+
+
+@dataclass
+class DataWorldObject(WorldObject):
+    need_transform: int
+    rotation: Vector4
+    position: Vector3
+    scale: Vector3
+    placed_in_level: int
+    parent_object_root: str
+    parent_object_name: str
+
+    @classmethod
+    def unpack(cls, stream: BinaryIO) -> 'DataWorldObject':
+        with StructIO(stream) as reader:
+            need_transform = reader.unpack("I")
+            rotation = Vector4.unpack(stream)
+            position = Vector3.unpack(stream)
+            scale = Vector3.unpack(stream)
+            placed_in_level = reader.unpack("I")
+            return DataWorldObject(None, None, None, None, None, need_transform, rotation, position, scale, placed_in_level, None, None)
+
+    def read_properties(self, stream: BinaryIO, build_version: int):
+        with StructIO(stream, str_null_terminated=True) as reader:
+            size = reader.unpack("I")
+            start = stream.tell()
+            parent_object_root = reader.unpack_len_encoded_str()
+            parent_object_name = reader.unpack_len_encoded_str()
+            component_count = reader.unpack("I")
+            components = []
+            for _ in range(component_count):
+                component = ObjectReference.unpack(stream)
+                components.append(component)
+            size -= (stream.tell() - start)
+
+            self.parent_object_root = parent_object_root
+            self.parent_object_name = parent_object_name
+            self.properties = WorldObjectProperties.unpack(stream, build_version, size)
+
+
+@dataclass
+class StrWorldObject(WorldObject):
+    data: str
 
 
 @dataclass
@@ -72,7 +125,6 @@ class WorldCollectedObject:
 class SaveBody:
     data_size: int
     world_objects: List[WorldObject]
-    world_objects_properties: List[WorldObjectProperties]
     world_collected_objects: List[WorldCollectedObject]
 
     @classmethod
@@ -95,14 +147,14 @@ class SaveBody:
             world_objects_property_count = reader.unpack(UInt32)
             assert world_objects_property_count == world_object_count
 
-            world_objects_properties = []
-            for _ in range(world_objects_property_count):
-                world_objects_properties.append(WorldObjectProperties.unpack(stream, header.build_version))
+            for i in range(world_objects_property_count):
+                world_object = world_objects[i]
+                world_object.read_properties(stream, header.build_version)
 
             world_collected_object_count = reader.unpack(UInt32)
             world_collected_objects = [WorldCollectedObject.unpack(stream) for _ in range(world_collected_object_count)]
 
-            return SaveBody(data_size, world_objects, world_objects_properties, world_collected_objects)
+            return SaveBody(data_size, world_objects, world_collected_objects)
 
 
 @dataclass
@@ -195,11 +247,17 @@ class CompressedSave:
 
 
 if __name__ == "__main__":
+    dump = save_file + ".dump"
     with open(save_file, "rb") as reader:
         save = CompressedSave.unpack(reader)
         print("Compressed:", save)
-        with open(save_file + ".dump", "w+b") as writer:
-            save.decompress_body_into(writer)
-            writer.seek(0)
-            b = save.decompress_from(writer)
-            print(b)
+        if not os.path.exists(dump):
+            with open(dump, "w+b") as writer:
+                save.decompress_body_into(writer)
+                writer.seek(0)
+                b = save.decompress_from(writer)
+                print(b)
+        else:
+            with open(dump, "rb") as reader:
+                b = save.decompress_from(reader)
+                print(b)
