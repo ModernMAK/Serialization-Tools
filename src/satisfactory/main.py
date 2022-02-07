@@ -1,14 +1,18 @@
+import dataclasses
+import json
 import os
 import zlib
 from dataclasses import dataclass
+from enum import Enum
 from io import BytesIO
+from json import JSONEncoder
 from typing import BinaryIO, List
 
 from satisfactory.properties import WorldObjectProperties
-from satisfactory.structures import Vector4, Vector3, ObjectReference
-from structio import StructIO, UInt32
+from satisfactory.structures import Vector4, Vector3, ObjectReference, Property
+from structio import StructIO, UInt32, as_hex_adr
 
-save_file = r"E:\Downloads" + r"\\" + r"waiting_for_coal_research.sav"
+save_file = r"C:\Users\moder\Downloads" + r"\\" + r"waiting_for_coal_research.sav"
 StructIO.str_null_terminated_default = True
 
 
@@ -42,10 +46,11 @@ class SaveHeader:
 @dataclass
 class WorldObject:
     type: int
-    name: str
-    property_type: str
-    value: str
-    properties: WorldObjectProperties
+    type_path: str
+    root_object: str
+    instance_name: str
+    properties: List[Property]
+    type_data:bytes
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'WorldObject':
@@ -56,19 +61,20 @@ class WorldObject:
 
             if type == 0:
                 data = reader.unpack_len_encoded_str()
-                return StrWorldObject(type, name, property_type, value, None, data)
+                return StrWorldObject(type, name, property_type, value, None, data,None)
             elif type == 1:
                 obj = DataWorldObject.unpack(stream)
             else:
                 raise ValueError()
             obj.type = type
-            obj.name = name
-            obj.property_type = property_type
-            obj.value = value
+            obj.type_path = name
+            obj.root_object = property_type
+            obj.instance_name = value
             return obj
 
-    def read_properties(self, stream: BinaryIO, build_version: int):
-        self.properties = WorldObjectProperties.unpack(stream, build_version)
+    def read_properties(self, stream: BinaryIO):
+        self.properties, excess = WorldObjectProperties.unpack(stream)
+        assert excess == 0, excess
 
 
 @dataclass
@@ -80,6 +86,7 @@ class DataWorldObject(WorldObject):
     placed_in_level: int
     parent_object_root: str
     parent_object_name: str
+    components: List
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'DataWorldObject':
@@ -89,11 +96,11 @@ class DataWorldObject(WorldObject):
             position = Vector3.unpack(stream)
             scale = Vector3.unpack(stream)
             placed_in_level = reader.unpack("I")
-            return DataWorldObject(None, None, None, None, None, need_transform, rotation, position, scale, placed_in_level, None, None)
+            return DataWorldObject(None, None, None, None, None, None, need_transform, rotation, position, scale, placed_in_level, None, None, None)
 
-    def read_properties(self, stream: BinaryIO, build_version: int):
+    def read_properties(self, stream: BinaryIO):
         with StructIO(stream, str_null_terminated=True) as reader:
-            size = reader.unpack("I")
+            read_size = size = reader.unpack("I")
             start = stream.tell()
             parent_object_root = reader.unpack_len_encoded_str()
             parent_object_name = reader.unpack_len_encoded_str()
@@ -106,7 +113,31 @@ class DataWorldObject(WorldObject):
 
             self.parent_object_root = parent_object_root
             self.parent_object_name = parent_object_name
-            self.properties = WorldObjectProperties.unpack(stream, build_version, size)
+            self.components = components
+            self.properties, excess = WorldObjectProperties.unpack(stream, size)
+
+
+            # Should determine if...
+            #   All /Game/FactoryGame/Buildable have excess
+            #   All Blueprints have excess
+            allowed_excess = [
+                "/Game/FactoryGame/Buildable/Factory/PowerLine/Build_PowerLine.Build_PowerLine_C",
+                "/Game/FactoryGame/Character/Player/BP_PlayerState.BP_PlayerState_C",
+                "/Game/FactoryGame/-Shared/Blueprint/BP_CircuitSubsystem.BP_CircuitSubsystem_C",
+                "/Game/FactoryGame/Buildable/Factory/ConveyorBeltMk1/Build_ConveyorBeltMk1.Build_ConveyorBeltMk1_C",
+                "/Game/FactoryGame/-Shared/Blueprint/BP_GameState.BP_GameState_C",
+                "/Game/FactoryGame/-Shared/Blueprint/BP_GameMode.BP_GameMode_C",
+            ]
+
+            # expected_excess = expected_data.get(self.type_path,0)
+
+            if self.type_path in allowed_excess:
+                assert excess > 0, (excess, "Excess Required", self.type_path)
+            else:
+                assert excess == 0, (excess, "Excess Disallowed", self.type_path)
+
+            if excess > 0:
+                self.type_data = stream.read(excess)
 
 
 @dataclass
@@ -116,9 +147,15 @@ class StrWorldObject(WorldObject):
 
 @dataclass
 class WorldCollectedObject:
+    type: str
+    value: str
+
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'WorldCollectedObject':
-        return None
+        with StructIO(stream) as reader:
+            type = reader.unpack_len_encoded_str()
+            value = reader.unpack_len_encoded_str()
+            return WorldCollectedObject(type, value)
 
 
 @dataclass
@@ -149,10 +186,15 @@ class SaveBody:
 
             for i in range(world_objects_property_count):
                 world_object = world_objects[i]
-                world_object.read_properties(stream, header.build_version)
+                world_object.read_properties(stream)
 
             world_collected_object_count = reader.unpack(UInt32)
             world_collected_objects = [WorldCollectedObject.unpack(stream) for _ in range(world_collected_object_count)]
+            with reader.bookmark():
+                start = reader.tell()
+                reader.seek(0, 2)
+                end = reader.tell()
+                assert start == end, (start, end)
 
             return SaveBody(data_size, world_objects, world_collected_objects)
 
@@ -246,18 +288,52 @@ class CompressedSave:
             return self.decompress_from(buffer)
 
 
+def dataclass2safedict(obj):
+    if dataclasses.is_dataclass(obj):
+        result = []
+        for f in dataclasses.fields(obj):
+            value = dataclass2safedict(getattr(obj, f.name))
+            result.append((f.name, value))
+        return dict(result)
+    elif isinstance(obj, tuple) and hasattr(obj, '_fields'):
+        return type(obj)(*[dataclass2safedict(v) for v in obj])
+    elif isinstance(obj, (list, tuple)):
+        return type(obj)(dataclass2safedict(v) for v in obj)
+    elif isinstance(obj, dict):
+        return [{"Key": dataclass2safedict(k), "Value": dataclass2safedict(v)} for k, v in obj.items()]
+        # return type(obj)((dataclass2safedict(k, dict_factory),
+        #                   dataclass2safedict(v, dict_factory))
+        #                  for k, v in obj.items())
+    else:
+        return obj
+
+
+class FullJsonEncoder(JSONEncoder):
+    def default(self, o):
+        if dataclasses.is_dataclass(o):
+            return dataclass2safedict(o)
+        elif isinstance(o, bytes):
+            return o.hex(bytes_per_sep=4,sep=" ")
+        elif isinstance(o, Enum):
+            return o.value
+        else:
+            return super().default(o)
+
+
 if __name__ == "__main__":
     dump = save_file + ".dump"
+
     with open(save_file, "rb") as reader:
         save = CompressedSave.unpack(reader)
-        print("Compressed:", save)
+        # print("Compressed:", save)
         if not os.path.exists(dump):
             with open(dump, "w+b") as writer:
                 save.decompress_body_into(writer)
                 writer.seek(0)
-                b = save.decompress_from(writer)
-                print(b)
+                full_save = save.decompress_from(writer)
         else:
             with open(dump, "rb") as reader:
-                b = save.decompress_from(reader)
-                print(b)
+                full_save = save.decompress_from(reader)
+
+        with open(save_file + '.json', "w") as jsonified:
+            json.dump(full_save, jsonified, cls=FullJsonEncoder, indent=4)

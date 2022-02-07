@@ -10,8 +10,13 @@ StructAble = Union[Struct, str, bytes]
 UInt8 = Struct("B")
 UInt16 = Struct("H")
 UInt32 = Struct("I")
-UInt64 = Struct("L")
+Int32 = Struct("i")
+UInt64 = Struct("Q")
+Int64 = Struct("q")
 Byte = Struct("c")
+
+def as_hex_adr(value:int) -> str:
+    return "0x"+value.to_bytes(4,"big").hex()
 
 
 class StructIO:

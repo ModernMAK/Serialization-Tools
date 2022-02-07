@@ -6,13 +6,13 @@ from structio import StructIO
 Property = ForwardRef("Property")
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Vector2:
     x: float
     y: float
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int = None) -> 'Vector2':
+    def unpack(cls, stream: BinaryIO) -> 'Vector2':
         with StructIO(stream) as reader:
             xy = reader.unpack("2f")
             return Vector2(*xy)
@@ -22,12 +22,12 @@ class Vector2:
             return writer.pack("2f", (self.x, self.y))
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Vector3(Vector2):
     z: float
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int = None) -> 'Vector3':
+    def unpack(cls, stream: BinaryIO) -> 'Vector3':
         with StructIO(stream) as reader:
             xyz = reader.unpack("3f")
             return Vector3(*xyz)
@@ -37,12 +37,12 @@ class Vector3(Vector2):
             return writer.pack("3f", (self.x, self.y, self.z))
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Vector4(Vector3):
     w: float
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int = None) -> 'Vector4':
+    def unpack(cls, stream: BinaryIO) -> 'Vector4':
         with StructIO(stream) as reader:
             xyzw = reader.unpack("4f")
             return Vector4(*xyzw)
@@ -51,24 +51,27 @@ class Vector4(Vector3):
         with StructIO(stream) as writer:
             return writer.pack("4f", (self.x, self.y, self.z, self.w))
 
-@dataclass
+
+@dataclass(unsafe_hash=True)
 class ObjectReference:
-    level:str
-    path:str
+    level: str
+    path: str
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int = None) -> 'ObjectReference':
+    def unpack(cls, stream: BinaryIO) -> 'ObjectReference':
         with StructIO(stream) as reader:
             level = reader.unpack_len_encoded_str()
             path = reader.unpack_len_encoded_str()
-            return ObjectReference(level,path)
+            return ObjectReference(level, path)
 
     def pack(self, stream: BinaryIO) -> int:
         with StructIO(stream) as writer:
             written = writer.pack_len_encoded_str(self.level)
             written += writer.pack_len_encoded_str(self.path)
             return written
-@dataclass
+
+
+@dataclass(unsafe_hash=True)
 class Color32:
     r: int
     g: int
@@ -84,7 +87,7 @@ class Color32:
         return self._is_byte(self.r) and self._is_byte(self.g) and self._is_byte(self.b) and self._is_byte(self.a)
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int = None) -> 'Color32':
+    def unpack(cls, stream: BinaryIO) -> 'Color32':
         with StructIO(stream) as reader:
             rgba = reader.unpack("4c")
             return Color32(*rgba)
@@ -96,7 +99,7 @@ class Color32:
             return writer.pack("4c", (self.r, self.g, self.b, self.a))
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Color:
     r: float
     g: float
@@ -112,7 +115,7 @@ class Color:
         return self._is_valid(self.r) and self._is_valid(self.g) and self._is_valid(self.b) and self._is_valid(self.a)
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int = None) -> 'Color':
+    def unpack(cls, stream: BinaryIO) -> 'Color':
         with StructIO(stream) as reader:
             rgba = reader.unpack("4f")
             return Color(*rgba)
@@ -128,29 +131,29 @@ Quaternion = Vector4
 Rotator = Vector3
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Structure:
     type: str
 
     @classmethod
-    def unpack_as_type(cls, stream: BinaryIO, build_version: int, type: str) -> 'Structure':
+    def unpack_as_type(cls, stream: BinaryIO, type: str) -> 'Structure':
         unpacker = _unpack_map.get(type, DynamicStructure.unpack)
-        structure = unpacker(stream, build_version)
+        structure = unpacker(stream)
         structure.type = type
         return structure
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class DynamicStructure(Structure):
     properties: List[Property]
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int) -> 'DynamicStructure':
+    def unpack(cls, stream: BinaryIO) -> 'DynamicStructure':
         from satisfactory.properties import Property
         # None property used as terminal?
         properties = []
         while True:
-            property = Property.unpack(stream, build_version)
+            property = Property.unpack(stream)
             if not property:
                 break
             else:
@@ -159,52 +162,76 @@ class DynamicStructure(Structure):
         return DynamicStructure(None, properties)
 
 
-@dataclass
-class BoxStructure(Structure):  # Probably an AABB (Axis-Aligned Bounding Box), unk could be enabled?
+@dataclass(unsafe_hash=True)
+class Box(Structure):  # Probably an AABB (Axis-Aligned Bounding Box), unk could be enabled?
     min: Vector3
     max: Vector3
     unk: bytes
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int) -> 'BoxStructure':
+    def unpack(cls, stream: BinaryIO) -> 'Box':
         from satisfactory.properties import Property
         # None property used as terminal?
         min = Vector3.unpack(stream)
         max = Vector3.unpack(stream)
         unk = stream.read(1)
 
-        return BoxStructure(None, min, max, unk)
+        return Box(None, min, max, unk)
 
-@dataclass
-class FluidBoxStructure(Structure):
+
+@dataclass(unsafe_hash=True)
+class FluidBox(Structure):
     unk: float
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int) -> 'FluidBoxStructure':
+    def unpack(cls, stream: BinaryIO) -> 'FluidBox':
         with StructIO(stream) as reader:
             unk = reader.unpack("f")
-            return FluidBoxStructure(None, unk)
+            return FluidBox(None, unk)
 
-@dataclass
+
+@dataclass(unsafe_hash=True)
 class GuidStructure(Structure):
     data: bytes
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, build_version: int) -> 'GuidStructure':
+    def unpack(cls, stream: BinaryIO) -> 'GuidStructure':
         data = stream.read(16)
-        return GuidStructure(None,data)
+        return GuidStructure(None, data)
+
+
+@dataclass(unsafe_hash=True)
+class InventoryItem(Structure):
+    a:int
+    item_type:str
+    b:str
+    c:str
+
+    @classmethod
+    def unpack(cls, stream: BinaryIO) -> 'InventoryItem':
+        with StructIO(stream) as reader:
+            a = reader.unpack("i")
+            item_type = reader.unpack_len_encoded_str()
+            b = reader.unpack_len_encoded_str()
+            c = reader.unpack_len_encoded_str()
+
+        return InventoryItem(None,a,item_type,b,c)
 
 
 _unpack_map: Dict[str, Callable] = {
-    "Box": BoxStructure.unpack,
+    "Box": Box.unpack,
     # Confusing, I know; UnityDEV here
     #   color via 4 bytes is Color32
     #   color via 4 floats is Color
     "Color": Color32.unpack,
     "LinearColor": Color.unpack,
-    "Quat":Quaternion.unpack,
-    "Vector":Vector3.unpack,
-    "Vector2D":Vector2.unpack,
-    "Rotator":Rotator.unpack,
-
+    "Quat": Quaternion.unpack,
+    "Vector": Vector3.unpack,
+    "Vector2D": Vector2.unpack,
+    "Rotator": Rotator.unpack,
+    "InventoryItem": InventoryItem.unpack,
+    "FINNetworkTrace": None,
+    "FluidBox": FluidBox.unpack,
+    "RailroadTrackPosition": None,
+    "Guid": GuidStructure.unpack,
 }
