@@ -14,11 +14,12 @@ UInt64 = Struct("L")
 Byte = Struct("c")
 
 
-
 class StructIO:
+    str_null_terminated_default = False
 
-    def __init__(self, stream: BinaryIO):
+    def __init__(self, stream: BinaryIO, str_null_terminated: bool = None):
         self.stream = stream
+        self._str_null_terminated = str_null_terminated or self.str_null_terminated_default
 
     def __enter__(self):
         return self
@@ -32,8 +33,8 @@ class StructIO:
     def write(self, value: bytes) -> int:
         return self.stream.write(value)
 
-    def seek(self, offset: int = None, whence: int = ...) -> int:
-        return self.stream.seek(offset, whence)
+    def seek(self, offset: int, whence: int = None) -> int:
+        return self.stream.seek(offset, whence) if whence else self.stream.seek(offset)
 
     def tell(self) -> int:
         return self.stream.tell()
@@ -93,19 +94,29 @@ class StructIO:
             written += self.pack(data_layout, item)
         return written
 
-    def unpack_len_encoded_str(self, length_layout: StructAble = UInt32, encoding: str = None, errors: str = None) -> str:
+    def unpack_len_encoded_str(self, length_layout: StructAble = UInt32, encoding: str = None, errors: str = None, null_terminated: bool = None) -> str:
         length_layout = self._parse_struct(length_layout)
         count: int = self.unpack(length_layout)
         bm = self.tell()
         buffer: bytes = self.read(count)
         try:
-            return self._decode(buffer, encoding, errors)
+            decoded = self._decode(buffer, encoding, errors)
+            if null_terminated:
+                if len(decoded) > 0 and decoded[-1] != "\0":
+                    raise ValueError(f"Expected null terminated string; null-charachter was not found! '{decoded}'")
+                else:
+                    decoded = decoded[:-1]
+            return decoded
         except UnicodeDecodeError:
-            raise ValueError(bm, "0x"+bm.to_bytes(4,"big").hex())
+            raise ValueError(bm, "0x" + bm.to_bytes(4, "big").hex())
 
-    def pack_len_encoded_str(self, value: str, length_layout: StructAble = UInt32, encoding: str = None, errors: str = None) -> int:
+    def pack_len_encoded_str(self, value: str, length_layout: StructAble = UInt32, encoding: str = None, errors: str = None, null_terminated: bool = None) -> int:
+        null_terminated = null_terminated or self._str_null_terminated
+
+        if null_terminated and (len(value) > 0 and value[-1] != "\0"):
+            value += "\0"
+
         length_layout = self._parse_struct(length_layout)
-
         buffer = self._encode(value, encoding, errors)
         count: int = len(buffer)
         written = self.pack(length_layout, count)
