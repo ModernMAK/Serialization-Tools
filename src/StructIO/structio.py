@@ -2,9 +2,12 @@
 
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+import struct
+from array import array
 from contextlib import contextmanager
+from mmap import mmap
 from struct import Struct
-from typing import BinaryIO, Tuple, Any, List, Union
+from typing import BinaryIO, Tuple, Any, List, Union, Iterator
 
 StructAble = Union[Struct, str, bytes]
 UInt8 = Struct("B")
@@ -15,12 +18,78 @@ UInt64 = Struct("Q")
 Int64 = Struct("q")
 Byte = Struct("c")
 
-def as_hex_adr(value:int) -> str:
-    return "0x"+value.to_bytes(4,"big").hex()
+StructFormat = Union[str, bytes]
+BufferFormat = Union[bytes, bytearray, memoryview, array, mmap]
+
+
+def as_hex_adr(value: int) -> str:
+    return "0x" + value.to_bytes(4, "big").hex()
+
+
+def unpack_stream(__format: StructFormat, __stream: BinaryIO) -> Tuple[Any, ...]:
+    size = struct.calcsize(__format)
+    buffer = __stream.read(size)
+    return struct.unpack(__format, buffer)
+
+
+def iter_unpack_stream(__format: StructFormat, __stream: BinaryIO) -> Iterator[Tuple[Any, ...]]:
+    size = struct.calcsize(__format)
+    while True:
+        buffer = __stream.read(size)
+        if len(buffer) == 0:  # End of Stream; job's done
+            break
+        elif len(buffer) != size:  # End of Stream BUT can't unpack, raise an error
+            raise NotImplementedError  # TODO
+        else:
+            yield struct.unpack(__format, buffer)
+
+
+def pack_stream(fmt: StructFormat, __stream: BinaryIO, *v) -> int:
+    buffer = struct.pack(fmt, *v)
+    return __stream.write(buffer)
+
+
+def self_unpack_stream(self: Struct, __stream: BinaryIO) -> Tuple[Any, ...]:
+    buffer = __stream.read(self.size)
+    return self.unpack(buffer)
+
+
+def self_iter_unpack_stream(self: Struct, __stream: BinaryIO) -> Iterator[Tuple[Any, ...]]:
+    while True:
+        buffer = __stream.read(self.size)
+        if len(buffer) == 0:  # End of Stream; job's done
+            break
+        elif len(buffer) != self.size:  # End of Stream BUT can't unpack, raise an error
+            raise NotImplementedError  # TODO
+        else:
+            yield self.unpack(buffer)
+
+
+def self_pack_stream(self: Struct, __stream: BinaryIO, *v) -> int:
+    buffer = self.pack(*v)
+    return __stream.write(buffer)
+
+
+def append_to_struct_module():
+    struct.unpack_stream = unpack_stream
+    struct.pack_stream = pack_stream
+    struct.iter_unpack_stream = iter_unpack_stream
+
+
+def append_to_struct_class():
+    Struct.unpack_stream = self_unpack_stream
+    Struct.pack_stream = self_pack_stream
+    Struct.iter_unpack_stream = self_iter_unpack_stream
+
+
+def append_utilities():
+    append_to_struct_class()
+    append_to_struct_module()
 
 
 class StructIO:
     str_null_terminated_default = False
+    _struct_cache = {}
 
     def __init__(self, stream: BinaryIO, str_null_terminated: bool = None):
         self.stream = stream
@@ -153,7 +222,13 @@ class StructIO:
 
     @classmethod
     def _parse_struct(cls, layout: StructAble) -> Struct:
-        return layout if isinstance(layout, Struct) else Struct(layout)
+        if isinstance(layout, Struct):
+            return layout
+        elif layout in cls._struct_cache:
+            return cls._struct_cache[layout]
+        else:
+            result = cls._struct_cache[layout] = Struct(layout)
+            return result
 
 
 class Window(StructIO):
@@ -181,4 +256,3 @@ class Window(StructIO):
     def __init__(self, stream: BinaryIO, start: int = None, end: int = None, size: int = None, str_null_terminated: bool = None):
         super(Window, self).__init__(stream, str_null_terminated)
         start, size = self.__parse_start_end_size(stream.tell(), start, end, size)
-

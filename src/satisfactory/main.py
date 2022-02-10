@@ -10,9 +10,9 @@ from typing import BinaryIO, List
 
 from satisfactory.properties import WorldObjectProperties
 from satisfactory.structures import Vector4, Vector3, ObjectReference, Property
-from structio import StructIO, UInt32, as_hex_adr
+from StructIO.structio import StructIO, UInt32
 
-save_file = r"C:\Users\moder\Downloads" + r"\\" + r"waiting_for_coal_research.sav"
+save_file = r"E:\Downloads" + r"\\" + r"waiting_for_coal_research.sav"
 StructIO.str_null_terminated_default = True
 
 

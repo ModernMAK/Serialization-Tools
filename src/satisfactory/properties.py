@@ -2,7 +2,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import BinaryIO, List, Callable, Dict, Tuple
 
-from structio import StructIO, UInt32, as_hex_adr, Int32, Int64
+from StructIO.structio import StructIO, UInt32, as_hex_adr, Int32, Int64
 from satisfactory.structures import Structure, DynamicStructure
 
 # PropertyInfo = namedtuple("PropertyInfo", ['name',])
@@ -224,10 +224,7 @@ class BoolProperty(Property):
 
 @dataclass(unsafe_hash=True)
 class StructProperty(Property):
-    # a: int
-    # b: int
-    # c: int
-    # d: int
+    abcd: Tuple[int,int,int,int]
     # e: bytes
     structure: Structure
 
@@ -235,17 +232,18 @@ class StructProperty(Property):
     def unpack(cls, stream: BinaryIO) -> 'StructProperty':
         with StructIO(stream, str_null_terminated=True) as reader:
             sub_type = reader.unpack_len_encoded_str()
-            abcde = reader.unpack("=4I c")
-            assert abcde == (0, 0, 0, 0, b'\x00'), abcde
+            abcd = reader.unpack("=4I")
+            e = reader.read(1)
+            assert e == NULL, e
 
             structure = Structure.unpack_as_type(stream, sub_type)
-            return StructProperty(None, PropertyType.Struct, None, structure)
+            return StructProperty(None, PropertyType.Struct, None, abcd, structure)
 
     @classmethod
     def unpack_element(cls, stream: BinaryIO) -> 'StructProperty':
         # with StructIO(stream, str_null_terminated=True) as reader:
         structure = DynamicStructure.unpack(stream)
-        return StructProperty(None, PropertyType.Struct, None, structure)
+        return StructProperty(None, PropertyType.Struct, None, None, structure)
 
     @classmethod
     def unpack_array(cls, stream: BinaryIO, count: int) -> 'List[StructProperty]':
@@ -261,14 +259,15 @@ class StructProperty(Property):
 
             sub_type = reader.unpack_len_encoded_str()
 
-            abcde = reader.unpack("=4I c")
-            assert abcde == (0, 0, 0, 0, b'\x00'), abcde
+            abcd = reader.unpack("=4I")
+            e = reader.read(1)
+            assert e == NULL, e
 
             items = []
             for i in range(count):
                 structure = Structure.unpack_as_type(stream, sub_type)
 
-                prop = StructProperty(name, parsed_type, index, structure)
+                prop = StructProperty(name, parsed_type, index, abcd, structure)
                 items.append(prop)
             return items
 
@@ -288,6 +287,7 @@ class NameProperty(Property):
 
 @dataclass(unsafe_hash=True)
 class ArrayProperty(Property):
+
     array_type: PropertyType
     values: List
 
@@ -378,7 +378,6 @@ _unpack_map: Dict[PropertyType, Callable[[BinaryIO], Property]] = {
     PropertyType.Byte: ByteProperty.unpack,
     PropertyType.Enum: EnumProperty.unpack,
     PropertyType.String: StringProperty.unpack,
-
 }
 _unpack_element_map: Dict[PropertyType, Callable[[BinaryIO], Property]] = {
     PropertyType.Struct: StructProperty.unpack_element,

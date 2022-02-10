@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import List, ForwardRef, BinaryIO, Dict, Callable
 
-from structio import StructIO
+from StructIO.structio import StructIO
 
 Property = ForwardRef("Property")
 
@@ -170,7 +170,6 @@ class Box(Structure):  # Probably an AABB (Axis-Aligned Bounding Box), unk could
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'Box':
-        from satisfactory.properties import Property
         # None property used as terminal?
         min = Vector3.unpack(stream)
         max = Vector3.unpack(stream)
