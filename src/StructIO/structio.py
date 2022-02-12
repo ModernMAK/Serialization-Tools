@@ -2,12 +2,12 @@
 
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-import struct
 from array import array
 from contextlib import contextmanager
 from mmap import mmap
-from struct import Struct
-from typing import BinaryIO, Tuple, Any, List, Union, Iterator
+from typing import BinaryIO, Tuple, Any, List, Union
+
+from StructIO.structx import Struct
 
 StructAble = Union[Struct, str, bytes]
 UInt8 = Struct("B")
@@ -24,67 +24,6 @@ BufferFormat = Union[bytes, bytearray, memoryview, array, mmap]
 
 def as_hex_adr(value: int) -> str:
     return "0x" + value.to_bytes(4, "big").hex()
-
-
-def unpack_stream(__format: StructFormat, __stream: BinaryIO) -> Tuple[Any, ...]:
-    size = struct.calcsize(__format)
-    buffer = __stream.read(size)
-    return struct.unpack(__format, buffer)
-
-
-def iter_unpack_stream(__format: StructFormat, __stream: BinaryIO) -> Iterator[Tuple[Any, ...]]:
-    size = struct.calcsize(__format)
-    while True:
-        buffer = __stream.read(size)
-        if len(buffer) == 0:  # End of Stream; job's done
-            break
-        elif len(buffer) != size:  # End of Stream BUT can't unpack, raise an error
-            raise NotImplementedError  # TODO
-        else:
-            yield struct.unpack(__format, buffer)
-
-
-def pack_stream(fmt: StructFormat, __stream: BinaryIO, *v) -> int:
-    buffer = struct.pack(fmt, *v)
-    return __stream.write(buffer)
-
-
-def self_unpack_stream(self: Struct, __stream: BinaryIO) -> Tuple[Any, ...]:
-    buffer = __stream.read(self.size)
-    return self.unpack(buffer)
-
-
-def self_iter_unpack_stream(self: Struct, __stream: BinaryIO) -> Iterator[Tuple[Any, ...]]:
-    while True:
-        buffer = __stream.read(self.size)
-        if len(buffer) == 0:  # End of Stream; job's done
-            break
-        elif len(buffer) != self.size:  # End of Stream BUT can't unpack, raise an error
-            raise NotImplementedError  # TODO
-        else:
-            yield self.unpack(buffer)
-
-
-def self_pack_stream(self: Struct, __stream: BinaryIO, *v) -> int:
-    buffer = self.pack(*v)
-    return __stream.write(buffer)
-
-
-def append_to_struct_module():
-    struct.unpack_stream = unpack_stream
-    struct.pack_stream = pack_stream
-    struct.iter_unpack_stream = iter_unpack_stream
-
-
-def append_to_struct_class():
-    Struct.unpack_stream = self_unpack_stream
-    Struct.pack_stream = self_pack_stream
-    Struct.iter_unpack_stream = self_iter_unpack_stream
-
-
-def append_utilities():
-    append_to_struct_class()
-    append_to_struct_module()
 
 
 class StructIO:
@@ -129,7 +68,6 @@ class StructIO:
 
     def unpack(self, layout: StructAble) -> Any:
         layout = self._parse_struct(layout)
-
         buffer = self.stream.read(layout.size)
         result = layout.unpack(buffer)
         if isinstance(result, tuple) and len(result) == 1:
@@ -139,7 +77,6 @@ class StructIO:
 
     def pack(self, layout: StructAble, data: Any) -> int:
         layout = self._parse_struct(layout)
-
         buffer = layout.pack(data)
         return self.stream.write(buffer)
 

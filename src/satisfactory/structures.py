@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import List, ForwardRef, BinaryIO, Dict, Callable
 
 from StructIO.structio import StructIO
+from satisfactory.error import NonePropertyError
 
 Property = ForwardRef("Property")
 
@@ -133,13 +134,16 @@ Rotator = Vector3
 
 @dataclass(unsafe_hash=True)
 class Structure:
-    type: str
+    structure_type: str
 
     @classmethod
     def unpack_as_type(cls, stream: BinaryIO, type: str) -> 'Structure':
+        assert type[-1] != "\0", "Type contains trailing null character! This is likely an error!"
+        assert isinstance(type[-1], str), "Type was not converted to string!"
+
         unpacker = _unpack_map.get(type, DynamicStructure.unpack)
         structure = unpacker(stream)
-        structure.type = type
+        structure.structure_type = type
         return structure
 
 
@@ -153,11 +157,11 @@ class DynamicStructure(Structure):
         # None property used as terminal?
         properties = []
         while True:
-            property = Property.unpack(stream)
-            if not property:
-                break
-            else:
+            try:
+                property = Property.unpack(stream)
                 properties.append(property)
+            except NonePropertyError:
+                break
 
         return DynamicStructure(None, properties)
 
@@ -201,10 +205,10 @@ class GuidStructure(Structure):
 
 @dataclass(unsafe_hash=True)
 class InventoryItem(Structure):
-    a:int
-    item_type:str
-    b:str
-    c:str
+    a: int
+    item_type: str
+    b: str
+    c: str
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'InventoryItem':
@@ -214,7 +218,7 @@ class InventoryItem(Structure):
             b = reader.unpack_len_encoded_str()
             c = reader.unpack_len_encoded_str()
 
-        return InventoryItem(None,a,item_type,b,c)
+        return InventoryItem(None, a, item_type, b, c)
 
 
 _unpack_map: Dict[str, Callable] = {
