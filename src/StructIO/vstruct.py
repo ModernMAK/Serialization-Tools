@@ -224,6 +224,7 @@ class VStruct:
                 self.__multi_layout = struct_list
         else:
             self.__layout = Struct(fmt)
+        self.format = fmt
 
     @property
     def min_size(self) -> int:
