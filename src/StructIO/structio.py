@@ -219,6 +219,12 @@ class BinaryWindow(BinaryIO):
     def __window_valid(self) -> bool:
         return self._start <= self._stream.tell() <= self._end
 
+    def abs_tell(self) -> int:
+        if isinstance(self._stream, BinaryWindow):
+            return self._stream.abs_tell()
+        else:
+            return self._stream.tell()
+
     def close(self) -> None:
         # DO NOT CLOSE THE STREAM
         pass

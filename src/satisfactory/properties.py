@@ -93,7 +93,10 @@ class Property:
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'Property':
-        start = stream.tell()  # Exclusively for Error raising purposes
+        if isinstance(stream, BinaryWindow):
+            start = stream.abs_tell()  # Exclusively for Error raising purposes
+        else:
+            start = stream.tell()
         header = PropertyHeader.unpack(stream)
 
         generic_unpacker = _unpack_map.get(header.property_type)
@@ -118,14 +121,10 @@ class Property:
 _unpack_map: Dict[PropertyType, Callable[[BinaryIO], PropertyData]] = {}  # Does not require header
 
 _unpack_header_map: Dict[PropertyType, Callable[[BinaryIO], PropertySubHeader]] = {}  # Unpack header
-_unpack_data_map: Dict[PropertyType, Callable[[BinaryIO,PropertySubHeader], PropertyData]] = {}  # Requires data
+_unpack_data_map: Dict[PropertyType, Callable[[BinaryIO, PropertySubHeader], PropertyData]] = {}  # Requires data
 
-_unpack_element_map: Dict[PropertyType, Callable[[BinaryIO], PropertyData]] = {}  # Unpack element, (doesn't need header)
-_unpack_array_map: Dict[PropertyType, Callable[[BinaryIO, int], List[PropertyData]]] = {}  # Unpack array, (doesn't need header)
-
-
-def unpack_default_header(stream: BinaryIO) -> None:
-    return None  # Assume that no header was expected
+_unpack_element_map: Dict[PropertyType, Callable[[BinaryIO], Any]] = {}  # Unpack element, (doesn't need header)
+_unpack_array_map: Dict[PropertyType, Callable[[BinaryIO, int], List]] = {}  # Unpack array, (doesn't need header)
 
 
 def __append_type_to_unpack(cls, prop_type):
@@ -153,17 +152,29 @@ class NativePropertyData(PropertyData):
     value: Any
 
     @classmethod
+    def convert(cls, v: Any) -> Any:
+        raise NotImplementedError
+
+    @classmethod
     def unpack(cls, stream: BinaryIO) -> 'NativePropertyData':
         value = cls.LAYOUT.unpack_stream(stream)[0]
+        if cls.convert != NativePropertyData.convert:
+            value = cls.convert(value)
         return cls(value)
 
     @classmethod
     def unpack_element(cls, stream: BinaryIO) -> Any:  # Here exclusively to support usage in map, should always prefer array
-        return cls.LAYOUT.unpack_stream(stream)[0]
+        value = arg = cls.LAYOUT.unpack_stream(stream)[0]
+        if cls.convert != NativePropertyData.convert:
+            value = cls.convert(arg)
+        return value
 
     @classmethod
     def unpack_array(cls, stream: BinaryIO, count: int) -> List[Any]:
-        return list(structx.unpack_stream(f"{count}{cls.LAYOUT.format}", stream))
+        value = list(structx.unpack_stream(f"{count}{cls.LAYOUT.format}", stream))
+        if cls.convert != NativePropertyData.convert:
+            value = [cls.convert(v) for v in value]
+        return value
 
 
 @dataclass(unsafe_hash=True)
@@ -172,18 +183,8 @@ class StringPropertyData(NativePropertyData):
     value: str
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'StringPropertyData':  # Redefined to parse str
-        value = cls.LAYOUT.unpack_stream(stream)[0]
-        return cls(buffer_to_str(value))
-
-    @classmethod
-    def unpack_element(cls, stream: BinaryIO) -> str:  # Redefined to parse str
-        value = cls.LAYOUT.unpack_stream(stream)[0]
-        return buffer_to_str(value)
-
-    @classmethod
-    def unpack_array(cls, stream: BinaryIO, count: int) -> List[Any]:
-        return [buffer_to_str(b) for b in structx.unpack_stream(f"{count}{cls.LAYOUT.format}", stream)]
+    def convert(cls, v: Any) -> Any:
+        return buffer_to_str(v)
 
 
 @dataclass(unsafe_hash=True)
@@ -410,7 +411,7 @@ class EnumHeader(PropertySubHeader):
     enum_type: str
 
     @classmethod
-    def unpack_header(cls,stream:BinaryIO) -> 'EnumHeader':
+    def unpack_header(cls, stream: BinaryIO) -> 'EnumHeader':
         sub_type = cls.TYPE_LAYOUT.unpack_stream(stream)[0]
         return EnumHeader(buffer_to_str(sub_type))
 
@@ -470,7 +471,7 @@ property2class = {
     PropertyType.Float: FloatPropertyData,
     PropertyType.Int64: Int64PropertyData,
     PropertyType.Int: IntPropertyData,
-    PropertyType.Enum: [EnumHeader,EnumProperty],
+    PropertyType.Enum: [EnumHeader, EnumProperty],
     PropertyType.Byte: [ByteHeader, ByteProperty],
     PropertyType.Map: [MapHeader, MapProperty],
     PropertyType.Object: ObjectPropertyData,
