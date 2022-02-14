@@ -104,7 +104,7 @@ class Property:
         data_unpacker = _unpack_data_map.get(header.property_type)
 
         if not generic_unpacker and (not data_unpacker or not subheader_unpacker):
-            raise NotImplementedError("Cant unpack property of type:", header.property_type.value, "@", as_hex_adr(start))
+            raise NotImplementedError("Cant unpack property of type:", header.property_type.value, "@", as_hex_adr(start), "No unpacker was available!")
 
         if generic_unpacker:
             subheader = None
@@ -152,27 +152,23 @@ class NativePropertyData(PropertyData):
     value: Any
 
     @classmethod
-    def convert(cls, v: Any) -> Any:
-        raise NotImplementedError
-
-    @classmethod
     def unpack(cls, stream: BinaryIO) -> 'NativePropertyData':
         value = cls.LAYOUT.unpack_stream(stream)[0]
-        if cls.convert != NativePropertyData.convert:
+        if hasattr(cls, "convert"):
             value = cls.convert(value)
         return cls(value)
 
     @classmethod
     def unpack_element(cls, stream: BinaryIO) -> Any:  # Here exclusively to support usage in map, should always prefer array
         value = arg = cls.LAYOUT.unpack_stream(stream)[0]
-        if cls.convert != NativePropertyData.convert:
+        if hasattr(cls, "convert"):
             value = cls.convert(arg)
         return value
 
     @classmethod
     def unpack_array(cls, stream: BinaryIO, count: int) -> List[Any]:
         value = list(structx.unpack_stream(f"{count}{cls.LAYOUT.format}", stream))
-        if cls.convert != NativePropertyData.convert:
+        if hasattr(cls, "convert"):
             value = [cls.convert(v) for v in value]
         return value
 
@@ -260,7 +256,7 @@ class ByteProperty:
 
 
 # @dataclass(unsafe_hash=True)
-class BoolProperty:  # Bool is actually a 'header' in my implimentation, flag comes after, wierd, IK
+class BoolProperty:  # Bool is actually a 'header' in my implementation, flag comes after, wierd, IK
     LAYOUT = VStruct("?")
 
     # value: bool
