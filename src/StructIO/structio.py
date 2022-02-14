@@ -180,6 +180,20 @@ class StructIO:
             return result
 
 
+class StreamPtr:
+    def __init__(self, stream: BinaryIO, offset: int = None, whence: int = 0):
+        self.stream = stream
+        self.offset = offset or stream.tell()
+        self.whence = whence
+
+    @contextmanager
+    def jump_to(self) -> BinaryIO:
+        prev = self.stream.tell()
+        self.stream.seek(self.offset, self.whence)
+        yield self.stream
+        self.stream.seek(prev)
+
+
 class BinaryWindow(BinaryIO):
     @classmethod
     def slice(cls, stream: BinaryIO, size: int):
@@ -187,47 +201,47 @@ class BinaryWindow(BinaryIO):
         return cls(stream, now, now + size)
 
     def __init__(self, stream: BinaryIO, start: int, end: int):
-        self.__stream = stream
-        self.__start = start
-        self.__end = end
-        assert self.__start <= self.__end
+        self._stream = stream
+        self._start = start
+        self._end = end
+        assert self._start <= self._end
 
     @property
     def __remaining_bytes(self) -> int:
-        remaining = self.__end - self.__stream.tell()
+        remaining = self._end - self._stream.tell()
         return remaining if remaining >= 0 else 0
 
     @property
     def __window_size(self) -> int:
-        return self.__end - self.__start
+        return self._end - self._start
 
     @property
     def __window_valid(self) -> bool:
-        return self.__start <= self.__stream.tell() <= self.__end
+        return self._start <= self._stream.tell() <= self._end
 
     def close(self) -> None:
         # DO NOT CLOSE THE STREAM
         pass
 
     def fileno(self) -> int:
-        return self.__stream.fileno()
+        return self._stream.fileno()
 
     def flush(self) -> None:
-        self.__stream.flush()  # TODO this may be a bad thing? look into it
+        self._stream.flush()  # TODO this may be a bad thing? look into it
 
     def isatty(self) -> bool:
         return self.isatty()
 
     def read(self, n: int = -1) -> AnyStr:
         if n == -1:
-            return self.__stream.read(self.__remaining_bytes)
+            return self._stream.read(self.__remaining_bytes)
         elif self.__remaining_bytes >= n:
-            return self.__stream.read(n)
+            return self._stream.read(n)
         else:
-            return self.__stream.read(self.__remaining_bytes)
+            return self._stream.read(self.__remaining_bytes)
 
     def readable(self) -> bool:
-        return self.__stream.readable()
+        return self._stream.readable()
 
     def readline(self, limit: int = ...) -> AnyStr:
         raise NotImplementedError
@@ -237,34 +251,34 @@ class BinaryWindow(BinaryIO):
 
     def seek(self, offset: int, whence: int = 0) -> int:
         if whence == 0:
-            self.__stream.seek(self.__start+offset, 0)
+            self._stream.seek(self._start + offset, 0)
         elif whence == 1:
-            self.__stream.seek(offset, 1)
+            self._stream.seek(offset, 1)
         elif whence == 2:
-            self.__stream.seek(self.__end-offset, 0)
+            self._stream.seek(self._end - offset, 0)
         else:
-            self.__stream.seek(offset, whence)
+            self._stream.seek(offset, whence)
 
         if not self.__window_valid:
             raise Exception("Seek made the window invalid!")
         return self.tell()
 
     def seekable(self) -> bool:
-        return self.__stream.seekable()
+        return self._stream.seekable()
 
     def tell(self) -> int:
-        return self.__stream.tell() - self.__start
+        return self._stream.tell() - self._start
 
     def truncate(self, size: Optional[int] = ...) -> int:
         raise NotImplementedError
 
     def writable(self) -> bool:
-        return self.__stream.writable()
+        return self._stream.writable()
 
     def write(self, s: AnyStr) -> int:
         n = len(s)
         if self.__remaining_bytes >= n:
-            return self.__stream.write(s)
+            return self._stream.write(s)
         else:
             raise Exception("Write would write outside the size of the BinaryWindow!")
 
@@ -283,3 +297,14 @@ class BinaryWindow(BinaryIO):
 
     def __enter__(self) -> BinaryIO:
         return self
+
+
+class StreamWindowPtr(StreamPtr):
+    def __init__(self, stream: BinaryIO, size: int, offset: int = None, whence: int = 0):
+        super().__init__(stream, offset, whence)
+        self.size = size
+
+    @contextmanager
+    def jump_to(self) -> BinaryIO:
+        with super(self).jump_to() as inner:  # We dont have to use inner, but it makes it obvious that the inner stream has correctly jumped
+            return BinaryWindow.slice(inner, self.size)
