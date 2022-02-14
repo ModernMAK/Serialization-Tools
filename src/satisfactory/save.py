@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import BinaryIO, List
 
-from StructIO.structio import BinaryWindow, end_of_stream
+from StructIO.structio import BinaryWindow, end_of_stream, StreamPtr
 from StructIO.vstruct import VStruct
 from .properties import WorldObjectProperties
 from .shared import buffer_to_str
@@ -135,25 +135,6 @@ class DataWorldObject(WorldObject):
             if len(excess) > 0:
                 self.excess_data = excess
             assert end_of_stream(window)
-            # # Should determine if...
-            # #   All /Game/FactoryGame/Buildable have excess
-            # #   All Blueprints have excess
-            # allowed_excess = [
-            #     "/Game/FactoryGame/Buildable/Factory/PowerLine/Build_PowerLine.Build_PowerLine_C",
-            #     "/Game/FactoryGame/Character/Player/BP_PlayerState.BP_PlayerState_C",
-            #     "/Game/FactoryGame/-Shared/Blueprint/BP_CircuitSubsystem.BP_CircuitSubsystem_C",
-            #     "/Game/FactoryGame/Buildable/Factory/ConveyorBeltMk1/Build_ConveyorBeltMk1.Build_ConveyorBeltMk1_C",
-            #     "/Game/FactoryGame/-Shared/Blueprint/BP_GameState.BP_GameState_C",
-            #     "/Game/FactoryGame/-Shared/Blueprint/BP_GameMode.BP_GameMode_C",
-            # ]
-            #
-            # # expected_excess = expected_data.get(self.type_path,0)
-            # excess = 0
-            # if self.header.type_path in allowed_excess:
-            #     assert excess > 0, (excess, "Excess Required", self.header.type_path)
-            # else:
-            #     assert excess == 0, (excess, "Excess Disallowed", self.header.type_path)
-            #
 
 
 @dataclass
@@ -216,6 +197,7 @@ class SaveBody:
         after = stream.tell()
         assert before == after, (before, after)
         stream.seek(before)
+
         return SaveBody(data_size, world_objects, world_collected_objects)
 
 
@@ -230,32 +212,32 @@ class ChunkHeader:
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'ChunkHeader':
-        package_file_tag, maximum_chunk_size, compressed_len, uncompressed_len, compressed_len_verify, uncompressed_len_verify = cls.LAYOUT.unpack_stream(stream)
+        package_file_tag, maximum_chunk_size, \
+            compressed_len, uncompressed_len, \
+            compressed_len_verify, uncompressed_len_verify = cls.LAYOUT.unpack_stream(stream)
+
         assert compressed_len == compressed_len_verify, ("COMP", compressed_len, compressed_len_verify)
         assert uncompressed_len == uncompressed_len_verify, ("UNCOMP", uncompressed_len, uncompressed_len_verify)
+
         return ChunkHeader(package_file_tag, maximum_chunk_size, compressed_len, uncompressed_len)
 
 
 @dataclass
 class Chunk:
     header: ChunkHeader
-    _stream: BinaryIO
-    _ptr: int
+    _ptr: StreamPtr
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'Chunk':
         header = ChunkHeader.unpack(stream)
-        ptr = stream.tell()
+        start = stream.tell()
         stream.seek(header.compressed_len, 1)
-        return Chunk(header, stream, ptr)
+        ptr = StreamPtr(stream, start)
+        return Chunk(header, ptr)
 
     def read_body(self, decompress: bool = True) -> bytes:
-        return_to = self._stream.tell()
-        self._stream.seek(self._ptr)
-
-        buffer = self._stream.read(self.header.compressed_len)
-
-        self._stream.seek(return_to)
+        with self._ptr.jump_to() as stream:
+            buffer = stream.read(self.header.compressed_len)
 
         assert len(buffer) == self.header.compressed_len
 
@@ -284,13 +266,9 @@ class CompressedSave:
         header = SaveHeader.unpack(stream)
         chunks = []
         while True:
-            bookmark = stream.tell()
-            if len(stream.read(1)) == 0:
+            if end_of_stream(stream):
                 break
-            stream.seek(bookmark)
-            chunk = Chunk.unpack(stream)
-
-            chunks.append(chunk)
+            chunks.append(Chunk.unpack(stream))
         return CompressedSave(header, chunks)
 
     def decompress_body_into(self, buffer: BinaryIO):

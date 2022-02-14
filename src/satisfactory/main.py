@@ -7,7 +7,7 @@ from json import JSONEncoder
 from os.path import splitext, basename
 from pathlib import Path
 
-from .save import CompressedSave
+from satisfactory.save import CompressedSave
 
 
 def dataclass2safedict(obj):
