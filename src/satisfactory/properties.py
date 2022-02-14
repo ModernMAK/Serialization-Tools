@@ -3,11 +3,11 @@ from enum import Enum
 from typing import BinaryIO, List, Callable, Dict, Tuple, Optional, Any, Union
 
 from StructIO import structx
-from StructIO.structio import as_hex_adr
+from StructIO.structio import as_hex_adr, BinaryWindow, end_of_stream
 from StructIO.structx import Struct
 from StructIO.vstruct import VStruct
-from satisfactory.error import NonePropertyError
-from satisfactory.structures import Structure, DynamicStructure
+from .shared import NonePropertyError, buffer_to_str
+from .structures import Structure, DynamicStructure
 
 NULL = b"\x00"
 
@@ -33,14 +33,7 @@ class PropertyType(Enum):
 
 @dataclass
 class PropertyData:
-    @property
-    def excess_read_size(self) -> int:
-        """
-            Size read that excludes the 'data' portion of a property.
-            E.G. A Dynamic Structure with only the None property present should only contain 9 bytes
-                Due to the nature of Dynamic Structure; an additional amount of bytes are read for the name and type, despite note being part of the data size
-        """
-        return 0
+    pass
 
 
 @dataclass(unsafe_hash=True)
@@ -53,16 +46,23 @@ class PropertyHeader:
 
     NAME_LAYOUT = VStruct("v")
     HEADER_LAYOUT = VStruct("v2I")  # Not present for None properties.
-    NONE_PROPERTY_NAME = "None\0"
+    NONE_PROPERTY_NAME = "None"
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> Optional['PropertyHeader']:
-        name: str = cls.NAME_LAYOUT.unpack_stream(stream)[0].decode()
+        name: str = buffer_to_str(cls.NAME_LAYOUT.unpack_stream(stream)[0])
         if name == cls.NONE_PROPERTY_NAME:
             raise NonePropertyError
         property_type, size, index = cls.HEADER_LAYOUT.unpack_stream(stream)
-        property_type = PropertyType(property_type.decode()[:-1])
+        property_type = PropertyType(buffer_to_str(property_type))
         return PropertyHeader(name, property_type, index, size)
+
+
+# This performs the validation check for the buffer start byte (0x00) and excludes it from reads
+def create_property_window(stream: BinaryIO, header: PropertyHeader) -> BinaryWindow:
+    buffer_start_byte = stream.read(1)
+    assert buffer_start_byte == b'\x00'
+    return BinaryWindow.slice(stream, header.read_size)
 
 
 @dataclass(unsafe_hash=True)
@@ -76,29 +76,21 @@ class Property:
         data_unpacker = _unpack_map.get(header.property_type)
         if not data_unpacker:
             raise NotImplementedError("Cant unpack property of type:", header.property_type.value, "@", as_hex_adr(stream.tell()))
-
-        before = stream.tell()
-        data = data_unpacker(stream)
-        after = stream.tell()
-        delta = after - before
-        expected = delta - data.excess_read_size
-        required_excess = delta - header.read_size
-
-        assert expected == header.read_size, (expected, header.read_size, " ", as_hex_adr(before), as_hex_adr(after), " ", data.excess_read_size, "/", required_excess, " ", header.read_size - expected)
+        data = data_unpacker(stream, header)
         return Property(header, data)
 
 
-_unpack_map: Dict[PropertyType, Callable[[BinaryIO], PropertyData]] = {}
+_unpack_map: Dict[PropertyType, Callable[[BinaryIO, PropertyHeader], PropertyData]] = {}
 _unpack_element_map: Dict[PropertyType, Callable[[BinaryIO], PropertyData]] = {}
 _unpack_array_map: Dict[PropertyType, Callable[[BinaryIO, int], List[PropertyData]]] = {}
 
 
 @dataclass(unsafe_hash=True)
 class NativeTypePropertyData(PropertyData):
-    name: Any
+    value: Any
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'NativeTypePropertyData':
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'NativeTypePropertyData':
         raise NotImplementedError
 
     @classmethod
@@ -121,35 +113,32 @@ def __append_type_to_unpack(cls, prop_type):
 
 @dataclass(unsafe_hash=True)
 class StringPropertyData(PropertyData):
-    LAYOUT = VStruct("cv")
+    LAYOUT = VStruct("v")
     name: str
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'StringPropertyData':
-        flag, value = cls.LAYOUT.unpack_stream(stream)
-        assert flag == NULL, flag
-        return StringPropertyData(value.decode())
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'StringPropertyData':
+        with create_property_window(stream, header) as window:
+            value = cls.LAYOUT.unpack_stream(window)[0]
+            assert end_of_stream(window)
+            return StringPropertyData(buffer_to_str(value))
 
 
 @dataclass(unsafe_hash=True)
 class IntPropertyData(NativeTypePropertyData):
-    LAYOUT = Struct("=ci")
-    ELEM_LAYOUT = Struct("i")
-    name: int
-
-    @property
-    def excess_read_size(self) -> int:
-        return 1 # for flag
+    LAYOUT = Struct("i")
+    value: int
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'IntPropertyData':
-        flag, value = cls.LAYOUT.unpack_stream(stream)
-        assert flag == NULL, flag
-        return IntPropertyData(value)
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'IntPropertyData':
+        with create_property_window(stream, header) as window:
+            value = cls.LAYOUT.unpack_stream(window)[0]
+            assert end_of_stream(window)
+            return IntPropertyData(value)
 
     @classmethod
     def unpack_element(cls, stream: BinaryIO) -> int:
-        return cls.ELEM_LAYOUT.unpack_stream(stream)[0]
+        return cls.LAYOUT.unpack_stream(stream)[0]
 
     @classmethod
     def unpack_array(cls, stream: BinaryIO, count: int) -> List[int]:
@@ -158,23 +147,19 @@ class IntPropertyData(NativeTypePropertyData):
 
 @dataclass(unsafe_hash=True)
 class Int64PropertyData(PropertyData):
-    LAYOUT = Struct("=cI")
-    ELEM_LAYOUT = Struct("I")
-    name: int
-
-    @property
-    def excess_read_size(self) -> int:
-        return 1 # for flag
+    LAYOUT = Struct("q")
+    value: int
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'Int64PropertyData':
-        flag, value = cls.LAYOUT.unpack_stream(stream)
-        assert flag == NULL, flag
-        return Int64PropertyData(value)
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'Int64PropertyData':
+        with create_property_window(stream, header) as window:
+            value = cls.LAYOUT.unpack_stream(window)[0]
+            assert end_of_stream(window)
+            return Int64PropertyData(value)
 
     @classmethod
     def unpack_element(cls, stream: BinaryIO) -> int:
-        return cls.ELEM_LAYOUT.unpack_stream(stream)[0]
+        return cls.LAYOUT.unpack_stream(stream)[0]
 
     @classmethod
     def unpack_array(cls, stream: BinaryIO, count: int) -> List[int]:
@@ -183,23 +168,19 @@ class Int64PropertyData(PropertyData):
 
 @dataclass(unsafe_hash=True)
 class FloatPropertyData(NativeTypePropertyData):
-    LAYOUT = Struct("=cf")
-    ELEM_LAYOUT = Struct("f")
-    name: float
-
-    @property
-    def excess_read_size(self) -> int:
-        return 1 # for flag
+    LAYOUT = Struct("f")
+    value: float
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'FloatPropertyData':
-        flag, value = cls.LAYOUT.unpack_stream(stream)
-        assert flag == NULL, flag
-        return FloatPropertyData(value)
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'FloatPropertyData':
+        with create_property_window(stream, header) as window:
+            value = cls.LAYOUT.unpack_stream(window)[0]
+            assert end_of_stream(window)
+            return FloatPropertyData(value)
 
     @classmethod
     def unpack_element(cls, stream: BinaryIO) -> float:
-        return cls.ELEM_LAYOUT.unpack_stream(stream)[0]
+        return cls.LAYOUT.unpack_stream(stream)[0]
 
     @classmethod
     def unpack_array(cls, stream: BinaryIO, count: int) -> List[float]:
@@ -208,44 +189,40 @@ class FloatPropertyData(NativeTypePropertyData):
 
 @dataclass(unsafe_hash=True)
 class ObjectPropertyData(PropertyData):
-    LAYOUT = VStruct("=c2v")
-    ELEM_LAYOUT = VStruct("2v")
+    LAYOUT = VStruct("2v")
 
     level: str
     path: str
 
-    @property
-    def excess_read_size(self) -> int:
-        return 1 # for flag
-
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'ObjectPropertyData':
-        flag, level, path = cls.LAYOUT.unpack_stream(stream)
-        assert flag == NULL, flag
-        return ObjectPropertyData(level.decode(), path.decode())
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'ObjectPropertyData':
+        with create_property_window(stream, header) as window:
+            r = cls.unpack_element(window)
+            assert end_of_stream(window)
+            return r
 
     @classmethod
     def unpack_element(cls, stream: BinaryIO) -> 'ObjectPropertyData':
-        level, path = cls.ELEM_LAYOUT.unpack_stream(stream)
-        return ObjectPropertyData(level.decode(), path.decode())
+        level, path = cls.LAYOUT.unpack_stream(stream)
+        return ObjectPropertyData(buffer_to_str(level), buffer_to_str(path))
 
 
 @dataclass(unsafe_hash=True)
 class ByteProperty(PropertyData):
-    PREFIX_LAYOUT = VStruct("vc")
+    TYPE_LAYOUT = VStruct("v")
     WORD_LAYOUT = VStruct("v")
     byte_type: str
-    name: Union[bytes, str]
+    value: Union[bytes, str]
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'ByteProperty':
-        sub_type, flag = cls.PREFIX_LAYOUT.unpack_stream(stream)
-        assert flag == NULL, flag
-        if sub_type == PropertyHeader.NONE_PROPERTY_NAME:
-            value = stream.read(1)
-            return ByteProperty(sub_type, value)
-        else:
-            value = cls.WORD_LAYOUT.unpack_stream(stream)[0].decode()
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'ByteProperty':
+        sub_type = buffer_to_str(cls.TYPE_LAYOUT.unpack_stream(stream)[0])
+        with create_property_window(stream, header) as window:
+            if sub_type == PropertyHeader.NONE_PROPERTY_NAME:
+                value = stream.read(1)
+            else:
+                value = buffer_to_str(cls.WORD_LAYOUT.unpack_stream(window)[0])
+            assert end_of_stream(window)
             return ByteProperty(sub_type, value)
 
     @classmethod
@@ -262,10 +239,6 @@ class BoolProperty(PropertyData):
     internal_value: bytes
 
     @property
-    def excess_read_size(self) -> int:
-        return 2 # for some reason read_size is 0; because this is a fixed size?
-
-    @property
     def as_bool(self) -> bool:
         return self.internal_value[0] > 0
 
@@ -274,7 +247,8 @@ class BoolProperty(PropertyData):
         return int(self.internal_value[0])
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'BoolProperty':
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'BoolProperty':
+        assert header.read_size == 0
         value, flag = stream.read(2)
         assert flag == 0, flag
         return BoolProperty(value)
@@ -290,20 +264,17 @@ class BoolProperty(PropertyData):
 
 @dataclass(unsafe_hash=True)
 class StructProperty(PropertyData):
-    LAYOUT = VStruct("v=4Ic")
+    LAYOUT = VStruct("v4I")
     abcd: Tuple[int, int, int, int]
     structure: Structure
 
-    @property
-    def excess_read_size(self) -> int:
-        return self.LAYOUT.min_size + (len(self.structure.structure_type) + 1)
-
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'StructProperty':
-        sub_type, a, b, c, d, flag = cls.LAYOUT.unpack_stream(stream)
-        assert flag == NULL, flag
-        structure = Structure.unpack_as_type(stream, sub_type.decode()[:-1])
-        return StructProperty((a, b, c, d), structure)
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'StructProperty':
+        sub_type, a, b, c, d = cls.LAYOUT.unpack_stream(stream)
+        with create_property_window(stream, header) as window:
+            structure = Structure.unpack_as_type(window, buffer_to_str(sub_type))
+            assert end_of_stream(window)
+            return StructProperty((a, b, c, d), structure)
 
     @classmethod
     def unpack_element(cls, stream: BinaryIO) -> 'Structure':
@@ -316,51 +287,46 @@ class StructProperty(PropertyData):
 
 @dataclass(unsafe_hash=True)
 class NameProperty(PropertyData):
-
-    @property
-    def excess_read_size(self) -> int:
-        return 1  # Because the flag value I guess?
-
-    LAYOUT = VStruct("cv")
+    LAYOUT = VStruct("v")
     name: str
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'NameProperty':
-        flag, name = cls.LAYOUT.unpack_stream(stream)
-        assert flag == NULL, flag
-        return NameProperty(name.decode())
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'NameProperty':
+        with create_property_window(stream, header) as window:
+            name = buffer_to_str(cls.LAYOUT.unpack_stream(window)[0])
+            assert end_of_stream(window)
+            return NameProperty(name)
 
 
 @dataclass(unsafe_hash=True)
 class ArrayProperty(PropertyData):
-    HEADER = VStruct("v=cI")
+    HEADER = VStruct("v")
+    LENGTH = VStruct("I")
     array_type: PropertyType
     values: List
 
-    @property
-    def excess_read_size(self) -> int:
-        return 4 + len(self.array_type.value) + 1 + 1
-
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'ArrayProperty':
-        array_type, flag, count = cls.HEADER.unpack_stream(stream)
-        array_type = PropertyType(array_type.decode()[:-1])
-        assert flag == NULL, flag
-
-        if array_type == PropertyType.Struct:  # Struct plays by its own rules
-            return StructArrayProperty.unpack(stream, count, array_type)
-        else:
-            array_unpacker = _unpack_array_map.get(array_type)
-            element_unpacker = _unpack_element_map.get(array_type)
-            if array_unpacker:
-                items = array_unpacker(stream, count)
-            elif element_unpacker:
-                items = [element_unpacker(stream) for _ in range(count)]
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'ArrayProperty':
+        array_type = cls.HEADER.unpack_stream(stream)[0]
+        array_type = PropertyType(buffer_to_str(array_type))
+        with create_property_window(stream, header) as window:
+            count = cls.LENGTH.unpack_stream(window)[0]
+            if array_type == PropertyType.Struct:  # Struct plays by its own rules
+                r = StructArrayProperty.unpack_struct_array(window, count, array_type)
+                assert end_of_stream(window)
+                return r
             else:
-                raise NotImplementedError("Cant unpack array of type", array_type)
-
-            return ArrayProperty(array_type, items)
+                array_unpacker = _unpack_array_map.get(array_type)
+                element_unpacker = _unpack_element_map.get(array_type)
+                if array_unpacker:
+                    items = array_unpacker(window, count)
+                elif element_unpacker:
+                    items = [element_unpacker(window) for _ in range(count)]
+                else:
+                    raise NotImplementedError("Cant unpack array of type", array_type)
+                assert end_of_stream(window)
+                return ArrayProperty(array_type, items)
 
 
 @dataclass(unsafe_hash=True)
@@ -371,76 +337,88 @@ class StructArrayProperty(ArrayProperty):
     values: List[Structure]
     __structure_type: str  # Present for ease of use
 
-    @property
-    def excess_read_size(self) -> int:
-        return 20 # Hardcoded for now, will fail eventually, TODO fix this
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, count: int, array_type: PropertyType) -> 'StructArrayProperty':
+    def unpack_struct_array(cls, stream: BinaryIO, count: int, array_type: PropertyType) -> 'StructArrayProperty':
         header = PropertyHeader.unpack(stream)
         assert header.name != PropertyHeader.NONE_PROPERTY_NAME, header.name
         assert header.property_type == PropertyType.Struct, header.property_type
 
-        struct_type, a, b, c, d, flag = StructProperty.LAYOUT.unpack_stream(stream)
-        assert flag == NULL, flag
-        struct_type = struct_type.decode()[:-1]
-
+        struct_type, a, b, c, d = StructProperty.LAYOUT.unpack_stream(stream)
+        struct_type = buffer_to_str(struct_type)
         items = []
         abcd = (a, b, c, d)
-
-        before = stream.tell()
-        for i in range(count):
-            structure = Structure.unpack_as_type(stream, struct_type)
-            items.append(structure)
-        after = stream.tell()
-        assert (after - before) == header.read_size, (after - before, header.read_size, after - before - header.read_size)
-        return StructArrayProperty(array_type, items, header, abcd, struct_type)
+        with create_property_window(stream, header) as window:
+            for i in range(count):
+                structure = Structure.unpack_as_type(window, struct_type)
+                items.append(structure)
+            assert end_of_stream(window)
+            return StructArrayProperty(array_type, items, header, abcd, struct_type)
 
 
 @dataclass(unsafe_hash=True)
 class MapProperty(PropertyData):
-    LAYOUT = VStruct("2v=c2I")
+    LAYOUT = VStruct("2v")
+    INNER_LAYOUT = VStruct("2I")
     key_type: PropertyType
     value_type: PropertyType
     map: Dict[PropertyData, PropertyData]
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'MapProperty':
-        key_type, value_type, flag, unk, count = cls.LAYOUT.unpack_stream(stream)
-        key_type = PropertyType(key_type.decode()[:-1])
-        value_type = PropertyType(value_type.decode()[:-1])
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'MapProperty':
+        key_type, value_type = cls.LAYOUT.unpack_stream(stream)
+        with create_property_window(stream, header) as window:
+            unk, count = cls.INNER_LAYOUT.unpack_stream(window)
+            assert unk == 0, unk
 
-        key_unpacker = _unpack_element_map[key_type]
-        value_unpacker = _unpack_element_map[value_type]
+            key_type = PropertyType(buffer_to_str(key_type))
+            value_type = PropertyType(buffer_to_str(value_type))
 
-        assert flag == NULL, unk
-        assert unk == 0, unk
+            key_unpacker = _unpack_element_map[key_type]
+            value_unpacker = _unpack_element_map[value_type]
 
-        map = {}
-
-        for _ in range(count):
-            key = key_unpacker(stream)
-            value = value_unpacker(stream)
-            map[key] = value
-        return MapProperty(key_type, value_type, map)
+            key_value_map = {}
+            for _ in range(count):
+                key = key_unpacker(stream)
+                value = value_unpacker(stream)
+                key_value_map[key] = value
+            assert end_of_stream(window)
+            return MapProperty(key_type, value_type, key_value_map)
 
 
 @dataclass(unsafe_hash=True)
 class EnumProperty(PropertyData):
-    LAYOUT = VStruct("vcv")
+    TYPE_LAYOUT = VStruct("v")
+    WORD_LAYOUT = VStruct("v")
     enum_type: str
     enum_name: str
 
     @classmethod
-    def unpack(cls, stream: BinaryIO) -> 'EnumProperty':
-        sub_type, flag, name = cls.LAYOUT.unpack_stream(stream)
-        assert flag == 0
-        return EnumProperty(sub_type.decode(), name.decode())
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader) -> 'EnumProperty':
+        sub_type = cls.TYPE_LAYOUT.unpack_stream(stream)[0]
+        with create_property_window(stream, header) as window:
+            name = cls.WORD_LAYOUT.unpack_stream(window)[0]
+            assert end_of_stream(window)
+            return EnumProperty(buffer_to_str(sub_type), buffer_to_str(name))
 
 
 @dataclass
-class ExcessDataProperty(PropertyData):
-    excess: bytes
+class InterfaceProperty:
+    LAYOUT = VStruct("2v")
+    a: str
+    b: str
+
+    @classmethod
+    def unpack(cls, stream: BinaryIO, header: PropertyHeader):
+        with create_property_window(stream, header) as window:
+            a, b = cls.LAYOUT.unpack_stream(window)
+            assert end_of_stream(window)
+            return InterfaceProperty(buffer_to_str(a), buffer_to_str(b))
+
+    @classmethod
+    def unpack_element(cls, stream: BinaryIO):
+        a, b = cls.LAYOUT.unpack_stream(stream)
+        return InterfaceProperty(buffer_to_str(a), buffer_to_str(b))
 
 
 class WorldObjectProperties:
@@ -450,27 +428,19 @@ class WorldObjectProperties:
     UInt32 = Struct("I")
 
     @classmethod
-    def unpack(cls, stream: BinaryIO, size: int = None) -> Tuple[List[Property], int]:
-        # Enforce null terminated for this particular run regardless of previous settings
-        if not size:
-            read_size = size = cls.UInt32.unpack(stream)
-        bm = stream.tell()
-        properties = []
-        while True:
-            try:
-                prop = Property.unpack(stream)
-                properties.append(prop)
-            except NonePropertyError:
-                break
-        zero = cls.UInt32.unpack_stream(stream)[0]
-        assert zero == 0, zero
-        excess = (bm + size) - stream.tell()
-        # excess_buffer = None
-        if excess > 0:
-            pass
-        elif excess < 0:
-            raise NotImplementedError("Read too much data!", excess)
-        return properties, excess
+    def unpack(cls, stream: BinaryIO, size: int) -> List[Property]:
+        with BinaryWindow.slice(stream, size) as window:
+            properties = []
+            while True:
+                try:
+                    prop = Property.unpack(window)
+                    properties.append(prop)
+                except NonePropertyError:
+                    break
+            zero = cls.UInt32.unpack_stream(window)[0]
+            assert zero == 0, zero
+            # assert end_of_stream(window), (window.tell(), window.read()) # We dont check here because of excess data
+            return properties
 
 
 property2class = {
@@ -487,7 +457,7 @@ property2class = {
     PropertyType.Array: ArrayProperty,
     PropertyType.Name: NameProperty,
     # PropertyType.Int8: Int8Property,
-    # PropertyType.Interface: InterfaceProperty,
+    PropertyType.Interface: InterfaceProperty,
 }
 for key, name in property2class.items():
     __append_type_to_unpack(name, key)

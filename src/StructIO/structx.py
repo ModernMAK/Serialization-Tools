@@ -6,13 +6,11 @@ from mmap import mmap
 from struct import *
 from typing import Union, BinaryIO, Tuple, Any, Iterator, List
 
-from StructIO.structio import Byte, UInt32
-
 _StructFormat = Union[str, bytes]
 _BufferFormat = Union[bytes, bytearray, memoryview, array, mmap]
 
-
-# _StructAble = Union[Struct, str, bytes]
+Byte = struct.Struct("c")
+UInt32 = struct.Struct("I")
 
 
 def unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Tuple[Any, ...]:
@@ -97,71 +95,3 @@ class Struct(struct.Struct):
     def pack_stream(self, __stream: BinaryIO, *v) -> int:
         buffer = self.pack(*v)
         return __stream.write(buffer)
-
-#
-# class BinaryIO(typing.BinaryIO):
-#     def __init__(self, stream: typing.BinaryIO):
-#         self._stream = stream
-#
-#     def close(self) -> None:
-#         self._stream.close()
-#
-#     def fileno(self) -> int:
-#         return self._stream.fileno()
-#
-#     def flush(self) -> None:
-#         self._stream.flush()
-#
-#     def isatty(self) -> bool:
-#         return self._stream.isatty()
-#
-#     def read(self, n: int = ...) -> AnyStr:
-#         return self._stream.read(n)
-#
-#     def readable(self) -> bool:
-#         return self._stream.readable()
-#
-#     def readline(self, limit: int = ...) -> AnyStr:
-#         return self._stream.readline(limit)
-#
-#     def readlines(self, hint: int = ...) -> list[AnyStr]:
-#         return self._stream.readlines(hint)
-#
-#     def seek(self, offset: int, whence: int = ...) -> int:
-#         return self.seek(offset, whence)
-#
-#     def seekable(self) -> bool:
-#         return self._stream.seekable()
-#
-#     def tell(self) -> int:
-#         return self._stream.tell()
-#
-#     def truncate(self, size: int | None = ...) -> int:
-#         return self._stream.truncate(size)
-#
-#     def writable(self) -> bool:
-#         return self._stream.writable()
-#
-#     def write(self, s: AnyStr) -> int:
-#         return self._stream.write(s)
-#
-#     def writelines(self, lines: Iterable[AnyStr]) -> None:
-#         return self._stream.writelines(lines)
-#
-#     def __next__(self) -> AnyStr:
-#         return self._stream.__next__()
-#
-#     def __iter__(self) -> Iterator[AnyStr]:
-#         return self._stream.__iter__()
-#
-#     def __exit__(self, t: Type[BaseException] | None, value: BaseException | None, traceback: TracebackType | None) -> bool | None:
-#         return self._stream.__exit__(t, value, traceback)
-#
-#     def __enter__(self) -> BinaryIO:
-#         return self._stream.__enter__()
-#
-#     @contextmanager
-#     def bookmark(self):
-#         now = self.tell()
-#         yield
-#         self.seek(now)

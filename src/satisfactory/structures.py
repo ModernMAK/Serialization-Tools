@@ -2,55 +2,53 @@ from dataclasses import dataclass
 from typing import List, ForwardRef, BinaryIO, Dict, Callable
 
 from StructIO.structio import StructIO
-from satisfactory.error import NonePropertyError
+from StructIO.structx import Struct
+from .shared import NonePropertyError
 
 Property = ForwardRef("Property")
 
 
 @dataclass(unsafe_hash=True)
 class Vector2:
+    LAYOUT = Struct("2f")
     x: float
     y: float
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'Vector2':
-        with StructIO(stream) as reader:
-            xy = reader.unpack("2f")
-            return Vector2(*xy)
+        xy = cls.LAYOUT.unpack_stream(stream)
+        return Vector2(*xy)
 
     def pack(self, stream: BinaryIO) -> int:
-        with StructIO(stream) as writer:
-            return writer.pack("2f", (self.x, self.y))
+        return self.LAYOUT.pack_stream(stream, self.x, self.y)
 
 
 @dataclass(unsafe_hash=True)
 class Vector3(Vector2):
+    LAYOUT = Struct("3f")
     z: float
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'Vector3':
-        with StructIO(stream) as reader:
-            xyz = reader.unpack("3f")
-            return Vector3(*xyz)
+        xyz = cls.LAYOUT.unpack_stream(stream)
+        return Vector3(*xyz)
 
     def pack(self, stream: BinaryIO) -> int:
-        with StructIO(stream) as writer:
-            return writer.pack("3f", (self.x, self.y, self.z))
+        return self.LAYOUT.pack_stream(stream, self.x, self.y, self.z)
 
 
 @dataclass(unsafe_hash=True)
 class Vector4(Vector3):
+    LAYOUT = Struct("4f")
     w: float
 
     @classmethod
     def unpack(cls, stream: BinaryIO) -> 'Vector4':
-        with StructIO(stream) as reader:
-            xyzw = reader.unpack("4f")
-            return Vector4(*xyzw)
+        xyzw = cls.LAYOUT.unpack_stream(stream)
+        return Vector4(*xyzw)
 
     def pack(self, stream: BinaryIO) -> int:
-        with StructIO(stream) as writer:
-            return writer.pack("4f", (self.x, self.y, self.z, self.w))
+        return self.LAYOUT.pack_stream(stream, self.x, self.y, self.z, self.w)
 
 
 @dataclass(unsafe_hash=True)

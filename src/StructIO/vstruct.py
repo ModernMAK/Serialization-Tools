@@ -3,9 +3,9 @@ import struct
 from struct import *
 from typing import BinaryIO, Tuple, Any, Iterator, List
 
-from StructIO import structx
-from StructIO.structio import UInt32, Byte, as_hex_adr
-from StructIO.structx import Struct, _StructFormat, _BufferFormat
+from . import structx
+from .structio import UInt32, Byte
+from .structx import Struct, _StructFormat, _BufferFormat
 
 WriteableBuffer = ReadableBuffer = _BufferFormat
 

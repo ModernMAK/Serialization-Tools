@@ -1,3 +1,0 @@
-
-class NonePropertyError(Exception):
-    pass

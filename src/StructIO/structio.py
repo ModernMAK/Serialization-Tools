@@ -5,9 +5,10 @@
 from array import array
 from contextlib import contextmanager
 from mmap import mmap
-from typing import BinaryIO, Tuple, Any, List, Union
+from types import TracebackType
+from typing import BinaryIO, Tuple, Any, List, Union, Optional, Type, Iterator, AnyStr, Iterable
 
-from StructIO.structx import Struct
+from .structx import Struct
 
 StructAble = Union[Struct, str, bytes]
 UInt8 = Struct("B")
@@ -24,6 +25,21 @@ BufferFormat = Union[bytes, bytearray, memoryview, array, mmap]
 
 def as_hex_adr(value: int) -> str:
     return "0x" + value.to_bytes(4, "big").hex()
+
+
+def has_data(stream: BinaryIO) -> bool:
+    now = stream.tell()
+    b = stream.read(1)
+    stream.seek(now)
+    return len(b) != 0
+
+
+def end_of_stream(stream: BinaryIO) -> bool:
+    now = stream.tell()
+    stream.seek(0, 2)
+    then = stream.tell()
+    stream.seek(now)
+    return now == then
 
 
 class StructIO:
@@ -55,10 +71,6 @@ class StructIO:
 
     def tell(self) -> int:
         return self.stream.tell()
-
-    @contextmanager
-    def window(self, start: int = None, end: int = None, size: int = None):
-        yield Window(self.stream, start, end, size, str_null_terminated=self._str_null_terminated)
 
     @contextmanager
     def bookmark(self):
@@ -168,28 +180,106 @@ class StructIO:
             return result
 
 
-class Window(StructIO):
+class BinaryWindow(BinaryIO):
     @classmethod
-    def __parse_start_end_size(cls, now: int, start: int = None, end: int = None, size: int = None) -> Tuple[int, int]:
-        if start:
-            if end and size:
-                raise NotImplementedError
-            elif end:
-                return start, end - start
-            elif size:
-                return start, size
-            else:
-                raise NotImplementedError
-        elif end:
-            if size:
-                return end - size, size
-            else:
-                return 0, end
-        elif size:
-            return now, size
-        else:
-            raise NotImplementedError
+    def slice(cls, stream: BinaryIO, size: int):
+        now = stream.tell()
+        return cls(stream, now, now + size)
 
-    def __init__(self, stream: BinaryIO, start: int = None, end: int = None, size: int = None, str_null_terminated: bool = None):
-        super(Window, self).__init__(stream, str_null_terminated)
-        start, size = self.__parse_start_end_size(stream.tell(), start, end, size)
+    def __init__(self, stream: BinaryIO, start: int, end: int):
+        self.__stream = stream
+        self.__start = start
+        self.__end = end
+        assert self.__start <= self.__end
+
+    @property
+    def __remaining_bytes(self) -> int:
+        remaining = self.__end - self.__stream.tell()
+        return remaining if remaining >= 0 else 0
+
+    @property
+    def __window_size(self) -> int:
+        return self.__end - self.__start
+
+    @property
+    def __window_valid(self) -> bool:
+        return self.__start <= self.__stream.tell() <= self.__end
+
+    def close(self) -> None:
+        # DO NOT CLOSE THE STREAM
+        pass
+
+    def fileno(self) -> int:
+        return self.__stream.fileno()
+
+    def flush(self) -> None:
+        self.__stream.flush()  # TODO this may be a bad thing? look into it
+
+    def isatty(self) -> bool:
+        return self.isatty()
+
+    def read(self, n: int = -1) -> AnyStr:
+        if n == -1:
+            return self.__stream.read(self.__remaining_bytes)
+        elif self.__remaining_bytes >= n:
+            return self.__stream.read(n)
+        else:
+            return self.__stream.read(self.__remaining_bytes)
+
+    def readable(self) -> bool:
+        return self.__stream.readable()
+
+    def readline(self, limit: int = ...) -> AnyStr:
+        raise NotImplementedError
+
+    def readlines(self, hint: int = ...) -> list[AnyStr]:
+        raise NotImplementedError
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        if whence == 0:
+            self.__stream.seek(self.__start+offset, 0)
+        elif whence == 1:
+            self.__stream.seek(offset, 1)
+        elif whence == 2:
+            self.__stream.seek(self.__end-offset, 0)
+        else:
+            self.__stream.seek(offset, whence)
+
+        if not self.__window_valid:
+            raise Exception("Seek made the window invalid!")
+        return self.tell()
+
+    def seekable(self) -> bool:
+        return self.__stream.seekable()
+
+    def tell(self) -> int:
+        return self.__stream.tell() - self.__start
+
+    def truncate(self, size: Optional[int] = ...) -> int:
+        raise NotImplementedError
+
+    def writable(self) -> bool:
+        return self.__stream.writable()
+
+    def write(self, s: AnyStr) -> int:
+        n = len(s)
+        if self.__remaining_bytes >= n:
+            return self.__stream.write(s)
+        else:
+            raise Exception("Write would write outside the size of the BinaryWindow!")
+
+    def writelines(self, lines: Iterable[AnyStr]) -> None:
+        raise NotImplementedError
+
+    def __next__(self) -> AnyStr:
+        raise NotImplementedError
+
+    def __iter__(self) -> Iterator[AnyStr]:
+        raise NotImplementedError
+
+    def __exit__(self, t: Optional[Type[BaseException]], value: Optional[BaseException], traceback: Optional[TracebackType]) -> Optional[bool]:
+        pass
+        # return self.__stream.__exit__(t, value, traceback) # CANT CALL BASE BECAUSE IT CLOSES STREAM
+
+    def __enter__(self) -> BinaryIO:
+        return self
