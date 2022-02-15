@@ -42,7 +42,7 @@ class FullJsonEncoder(JSONEncoder):
             return super().default(o)
 
 
-def run(infile: str, dumpfile: str = None, jsonfile: str = None, redump: bool = True):
+def run(infile: str, dumpfile: str = None, jsonfile: str = None, redump: bool = True, dump_json: bool = False): # Dumping json takes forever; so we don't do it unless requested
     dumpfile = dumpfile or basename(infile) + ".bodydump"
     jsonfile = jsonfile or splitext(basename(infile))[0] + ".json"
 
@@ -58,8 +58,9 @@ def run(infile: str, dumpfile: str = None, jsonfile: str = None, redump: bool = 
             with open(dumpfile, "rb") as dump_reader:
                 full_save = save.decompress_from(dump_reader)
 
-        with open(jsonfile, "w") as json_writer:
-            json.dump(full_save, json_writer, cls=FullJsonEncoder, indent=4)
+        if dump_json:
+            with open(jsonfile, "w") as json_writer:
+                json.dump(full_save, json_writer, cls=FullJsonEncoder, indent=4)
 
 
 def get_latest_save() -> str:

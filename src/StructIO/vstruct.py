@@ -4,7 +4,7 @@ from struct import *
 from typing import BinaryIO, Tuple, Any, Iterator, List
 
 from . import structx
-from .structio import UInt32, Byte
+from .structio import UInt32, Byte, as_hex_adr, BinaryWindow
 from .structx import Struct, _StructFormat, _BufferFormat
 
 WriteableBuffer = ReadableBuffer = _BufferFormat
@@ -101,7 +101,7 @@ class _VarLenStruct(structx.Struct):
         for _ in range(self.length):
             s: int = s_layout.unpack_from(buffer, o)[0]
             o += s_layout.size
-            if o+s > l:
+            if o + s > l:
                 raise NotImplementedError
             v = buffer[o:o + s]
 
@@ -118,7 +118,7 @@ class _VarLenStruct(structx.Struct):
         now = __stream.tell()
         for _ in range(self.length):
             s: int = s_layout.unpack_stream(__stream)[0]
-            assert s >= 0, as_hex_adr(__stream.tell()-4) # TODO REMOVE DEBUG
+            assert s >= 0, (s, "@", as_hex_adr((__stream.abs_tell() if isinstance(__stream,BinaryWindow) else __stream.tell()) - 4))  # TODO REMOVE DEBUG
             v: bytes = __stream.read(s)
             if len(v) != s:
                 raise NotImplementedError
@@ -289,7 +289,7 @@ class VStruct:
                     __stream.seek(bm)
                     raise
                 else:
-                    break   # End of Stream; job's done
+                    break  # End of Stream; job's done
 
     def pack_stream(self, __stream: BinaryIO, *v) -> int:
         raise NotImplementedError
@@ -299,4 +299,5 @@ class VStruct:
 
 if __name__ == "__main__":
     from satisfactory.properties import *
+
     VStruct("I10v12c")

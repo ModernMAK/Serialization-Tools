@@ -225,6 +225,15 @@ class ObjectPropertyData(PropertyData, RootPathPair):
     def unpack_element(cls, stream: BinaryIO) -> 'ObjectPropertyData':
         return cls.unpack(stream)
 
+@dataclass
+class TextProperty(PropertyData):
+    unk: bytes # TODO deciphe
+
+    @classmethod
+    def unpack(cls, stream: BinaryIO) -> 'TextProperty':
+        unks = stream.read()
+        return TextProperty(unks)
+
 
 @dataclass(unsafe_hash=True)
 class ByteHeader(PropertySubHeader):
@@ -235,6 +244,7 @@ class ByteHeader(PropertySubHeader):
     def unpack_header(cls, stream: BinaryIO) -> 'ByteHeader':
         type = buffer_to_str(cls.LAYOUT.unpack_stream(stream)[0])
         return ByteHeader(type)
+
 
 
 # @dataclass(unsafe_hash=True)
@@ -251,6 +261,10 @@ class ByteProperty:
             return buffer_to_str(cls.LAYOUT.unpack_stream(stream)[0])
 
     @classmethod
+    def unpack_element(cls, stream: BinaryIO) -> Union[str, bytes]:
+        return stream.read(1)
+
+    @classmethod
     def unpack_array(cls, stream: BinaryIO, count: int) -> bytes:
         return stream.read(count)
 
@@ -262,12 +276,16 @@ class BoolProperty:  # Bool is actually a 'header' in my implementation, flag co
     # value: bool
 
     @classmethod
-    def unpack_header(cls, stream: BinaryIO):
+    def unpack_header(cls, stream: BinaryIO) -> bool:
         return cls.LAYOUT.unpack_stream(stream)[0]
 
     @classmethod
     def unpack_data(cls, stream: BinaryIO, header: bool) -> None:
         return None
+
+    @classmethod
+    def unpack_element(cls, stream: BinaryIO) -> bool:
+        return cls.LAYOUT.unpack_stream(stream)[0]
 
 
 @dataclass(unsafe_hash=True)
@@ -473,6 +491,7 @@ property2class = {
     PropertyType.Object: ObjectPropertyData,
     PropertyType.Array: [ArrayHeader, ArrayProperty],
     PropertyType.Name: NameProperty,
+    PropertyType.Text: TextProperty,
     # PropertyType.Int8: Int8Property,
     PropertyType.Interface: InterfaceProperty,
 }

@@ -71,6 +71,15 @@ class ObjectReference:
 
 
 @dataclass(unsafe_hash=True)
+class DateTime:
+    unks: bytes  # TODO decipher
+
+    @classmethod
+    def unpack(cls, stream: BinaryIO) -> 'DateTime':
+        return DateTime(stream.read())
+
+
+@dataclass(unsafe_hash=True)
 class Color32:
     r: int
     g: int
@@ -235,4 +244,5 @@ _unpack_map: Dict[str, Callable] = {
     "FluidBox": FluidBox.unpack,
     "RailroadTrackPosition": None,
     "Guid": GuidStructure.unpack,
+    "DateTime": DateTime.unpack,
 }
