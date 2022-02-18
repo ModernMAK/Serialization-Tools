@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import BinaryIO, List, Callable, Dict, Tuple, Any, Union, ClassVar, Optional
 
-from StructIO import structx
-from StructIO.structio import as_hex_adr, BinaryWindow, end_of_stream
-from StructIO.structx import Struct
-from StructIO.vstruct import VStruct
+from ArchiveTools import structx
+from ArchiveTools.structio import as_hex_adr, BinaryWindow, end_of_stream
+from ArchiveTools.structx import Struct
+from ArchiveTools.vstruct import VStruct
 from .shared import NonePropertyError, buffer_to_str
 from .structures import Structure, DynamicStructure
 

@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import List, ForwardRef, BinaryIO, Dict, Callable
 
-from StructIO.structio import StructIO
-from StructIO.structx import Struct
+from ArchiveTools.structio import StructIO
+from ArchiveTools.structx import Struct
 from .shared import NonePropertyError
 
 Property = ForwardRef("Property")

@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import BinaryIO, List
 
-from StructIO.structio import BinaryWindow, end_of_stream, StreamPtr
-from StructIO.vstruct import VStruct
+from ArchiveTools.structio import BinaryWindow, end_of_stream, StreamPtr
+from ArchiveTools.vstruct import VStruct
 from .properties import WorldObjectProperties
 from .shared import buffer_to_str
 from .structures import Vector4, Vector3, ObjectReference, Property

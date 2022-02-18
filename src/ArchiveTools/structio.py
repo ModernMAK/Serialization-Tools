@@ -273,6 +273,12 @@ class BinaryWindow(BinaryIO):
         return self._stream.seekable()
 
     def tell(self) -> int:
+        return self.tell_abs()
+
+    def tell_abs(self) -> int:
+        return self._stream.tell()
+
+    def tell_rel(self) -> int:
         return self._stream.tell() - self._start
 
     def truncate(self, size: Optional[int] = ...) -> int:
