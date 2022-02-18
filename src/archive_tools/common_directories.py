@@ -30,7 +30,7 @@ else:
 def get_steam_install_dir() -> Path:
     try:  # Try 64 bit first
         steam = read_install_path_from_registry(_VALVE_REG_PATH, 64)
-    except FileNotFoundError:  # otherwise try 32 bit
+    except FileNotFoundError:  # otherwise, try 32 bit
         steam = read_install_path_from_registry(_VALVE_REG_PATH, 32)
     return Path(steam)
 

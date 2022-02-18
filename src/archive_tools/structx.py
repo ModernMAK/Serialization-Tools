@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import struct
+from struct import calcsize, unpack, pack
 from array import array
 from mmap import mmap
-from struct import *
 from typing import Union, BinaryIO, Tuple, Any, Iterator, List
 
 _StructFormat = Union[str, bytes]

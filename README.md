@@ -1,5 +1,5 @@
 # ArchiveTools
- Small collection of python snippets i reuse in file format dumping
+ Small collection of python snippets I reuse in file format dumping
 
 # Installation
 Installing using pip:
