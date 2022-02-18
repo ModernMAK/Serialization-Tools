@@ -1,13 +1,10 @@
-# This is a sample Python script.
-
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 from array import array
 from contextlib import contextmanager
 from mmap import mmap
 from types import TracebackType
 from typing import BinaryIO, Union, Optional, Type, Iterator, AnyStr, Iterable
 
+from .error import ParsingError
 from .structx import Struct
 
 StructAble = Union[Struct, str, bytes]
@@ -21,6 +18,15 @@ Byte = Struct("c")
 
 StructFormat = Union[str, bytes]
 BufferFormat = Union[bytes, bytearray, memoryview, array, mmap]
+
+
+@contextmanager
+def as_parsing_window(stream: BinaryIO) -> BinaryIO:
+    start = abs_tell(stream)
+    try:
+        yield stream
+    except BaseException as e:
+        raise ParsingError(start) from e
 
 
 def as_hex_adr(value: int, size: int = 4) -> str:
@@ -179,6 +185,11 @@ class BinaryWindow(BinaryIO):
 
     def __enter__(self) -> 'BinaryWindow':
         return self
+
+    @contextmanager
+    def as_parsing_window(self) -> 'BinaryWindow':
+        # noinspection PyTypeChecker
+        return as_parsing_window(self)
 
 
 class StreamWindowPtr(StreamPtr):
