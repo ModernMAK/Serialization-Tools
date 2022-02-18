@@ -154,7 +154,7 @@ def separate_vlen_format(fmt: str) -> List[str]:
 def parse_vlen_format(fmt: List[str]) -> List[Struct]:
     p = []
     for f in fmt:
-        f.strip()  # ensures format has no whitespace before '<=>@' characters
+        f = f.strip()  # ensures format has no whitespace before '<=>@' characters
         if "v" in f or "V" in f:
             s = _VarLenStruct(f)  # Special struct for VLen handling
         else:
