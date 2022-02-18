@@ -23,8 +23,8 @@ StructFormat = Union[str, bytes]
 BufferFormat = Union[bytes, bytearray, memoryview, array, mmap]
 
 
-def as_hex_adr(value: int) -> str:
-    return "0x" + value.to_bytes(4, "big").hex()
+def as_hex_adr(value: int, size: int = 4) -> str:
+    return "0x" + value.to_bytes(size, "big").hex()
 
 
 def has_data(stream: BinaryIO) -> bool:
@@ -40,6 +40,18 @@ def end_of_stream(stream: BinaryIO) -> bool:
     then = stream.tell()
     stream.seek(now)
     return now == then
+
+
+def abs_tell(stream: BinaryIO) -> int:
+    if hasattr(stream, "abs_tell"):
+        return stream.abs_tell()
+    else:
+        return stream.tell()
+
+
+def stream2hex(stream: BinaryIO, **kwargs) -> str:
+    now = abs_tell(stream)
+    return as_hex_adr(now, **kwargs)
 
 
 class StreamPtr:
@@ -137,12 +149,6 @@ class BinaryWindow(BinaryIO):
         return self._stream.seekable()
 
     def tell(self) -> int:
-        return self.tell_abs()
-
-    def tell_abs(self) -> int:
-        return self._stream.tell()
-
-    def tell_rel(self) -> int:
         return self._stream.tell() - self._start
 
     def truncate(self, size: Optional[int] = ...) -> int:
