@@ -85,10 +85,16 @@ class StreamPtr(Ptr):
 
 
 class BinaryWindow(BinaryIO):
+
     @classmethod
-    def slice(cls, stream: BinaryIO, size: int):
+    def slice(cls, stream: BinaryIO, size: int = None):
         now = stream.tell()
-        return cls(stream, now, now + size)
+        if size is not None:
+            return cls(stream, now, now + size)
+        else:
+            end = stream.seek(0, 2)
+            stream.seek(now)
+            return cls(stream, now, end)
 
     def __init__(self, stream: BinaryIO, start: int, end: int):
         self._stream = stream
@@ -204,19 +210,19 @@ class BinaryWindow(BinaryIO):
 
 
 class WindowPtr(Ptr):
-    def __init__(self, offset: int, size: int, whence: int = 0):
+    def __init__(self, offset: int, size: int = None, whence: int = 0):
         super().__init__(offset, whence)
         self.size = size
 
     @contextmanager
     def stream_jump_to(self, stream: BinaryIO) -> BinaryIO:
-        with super(self).stream_jump_to(stream) as inner:
+        with super().stream_jump_to(stream) as inner:
             with BinaryWindow.slice(inner, self.size) as window:
                 yield window
 
 
 class StreamWindowPtr(StreamPtr, WindowPtr):
-    def __init__(self, stream: BinaryIO, size: int, offset: int = None, whence: int = 0):
+    def __init__(self, stream: BinaryIO, size: int = None, offset: int = None, whence: int = 0):
         super(StreamPtr).__init__(stream, offset, whence)
         super(WindowPtr).__init__(offset, size, whence)
 
