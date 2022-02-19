@@ -189,7 +189,8 @@ class BinaryWindow(BinaryIO):
     @contextmanager
     def as_parsing_window(self) -> 'BinaryWindow':
         # noinspection PyTypeChecker
-        return as_parsing_window(self)
+        with as_parsing_window(self) as pw:
+            yield pw
 
 
 class StreamWindowPtr(StreamPtr):
