@@ -60,18 +60,28 @@ def stream2hex(stream: BinaryIO, **kwargs) -> str:
     return as_hex_adr(now, **kwargs)
 
 
-class StreamPtr:
-    def __init__(self, stream: BinaryIO, offset: int = None, whence: int = 0):
-        self.stream = stream
-        self.offset = offset or stream.tell()
+class Ptr:
+    def __init__(self, offset: int, whence: int = 0):
+        self.offset = offset
         self.whence = whence
 
     @contextmanager
+    def stream_jump_to(self, stream: BinaryIO) -> BinaryIO:
+        prev = stream.tell()
+        stream.seek(self.offset, self.whence)
+        yield stream
+        stream.seek(prev)
+
+
+class StreamPtr(Ptr):
+    def __init__(self, stream: BinaryIO, offset: int = None, whence: int = 0):
+        super().__init__(offset or stream.tell(), whence)
+        self.stream = stream
+
+    @contextmanager
     def jump_to(self) -> BinaryIO:
-        prev = self.stream.tell()
-        self.stream.seek(self.offset, self.whence)
-        yield self.stream
-        self.stream.seek(prev)
+        with self.stream_jump_to(self.stream) as stream:
+            yield stream
 
 
 class BinaryWindow(BinaryIO):
@@ -193,12 +203,24 @@ class BinaryWindow(BinaryIO):
             yield pw
 
 
-class StreamWindowPtr(StreamPtr):
-    def __init__(self, stream: BinaryIO, size: int, offset: int = None, whence: int = 0):
-        super().__init__(stream, offset, whence)
+class WindowPtr(Ptr):
+    def __init__(self, offset: int, size: int, whence: int = 0):
+        super().__init__(offset, whence)
         self.size = size
 
     @contextmanager
+    def stream_jump_to(self, stream: BinaryIO) -> BinaryIO:
+        with super(self).stream_jump_to(stream) as inner:
+            with BinaryWindow.slice(inner, self.size) as window:
+                yield window
+
+
+class StreamWindowPtr(StreamPtr, WindowPtr):
+    def __init__(self, stream: BinaryIO, size: int, offset: int = None, whence: int = 0):
+        super(StreamPtr).__init__(stream, offset, whence)
+        super(WindowPtr).__init__(offset, size, whence)
+
+    @contextmanager
     def jump_to(self) -> BinaryIO:
-        with super(self).jump_to() as inner:  # We don't have to use inner, but it makes it obvious that the inner stream has correctly jumped
-            return BinaryWindow.slice(inner, self.size)
+        with self.stream_jump_to(self.stream) as inner:  # We don't have to use inner, but it makes it obvious that the inner stream has correctly jumped
+            yield inner
