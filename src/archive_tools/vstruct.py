@@ -221,7 +221,7 @@ class VStruct:
                     v = part.unpack_from(__buffer, o)
                     s = part.size
                 o += s
-                unpacked.append(v)
+                unpacked.extend(v)
             return tuple(unpacked)
         else:
             return self.__layout.unpack_from(__buffer, offset)

@@ -78,8 +78,11 @@ def filter_by_file_extension(walk: OsWalk, whitelist: Optional[WhiteList] = None
     return filter_files_by_predicate(walk, pred, **filter_kwargs)
 
 
-def path_allowed(path: PathLike, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
-    str_path = path.__fspath__()
+def path_allowed(path: Union[str,PathLike], whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
+    if isinstance(path,PathLike):
+        str_path = path.__fspath__()
+    else:
+        str_path = path
     wl_result = whitelisted(str_path, whitelist) if whitelist else None
     bl_result = blacklisted(str_path, blacklist) if blacklist else None
     return __resolve_whitelist_blacklist_results(wl_result, bl_result)
