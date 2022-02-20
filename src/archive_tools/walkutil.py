@@ -41,16 +41,30 @@ def blacklisted(value: str, blacklist: BlackList):
     return whitelisted(value, blacklist)
 
 
+def __resolve_whitelist_blacklist_results(whitelist_result: Optional[bool], blacklist_result: Optional[bool]) -> bool:
+    # If whitelist only
+    #   Assume blacklist is remaining 'Universe'
+    # If blacklist only
+    #   Assume whitelist is remaining 'Universe'
+    # If whitelist AND blacklist
+    #   return whitelist_result or not blacklist_result
+
+    if whitelist_result is not None and blacklist_result is not None:
+        return whitelist_result or not blacklist_result
+    elif whitelist_result is not None:
+        return whitelist_result
+    elif blacklist_result is not None:
+        return not blacklist_result
+    else:
+        raise NotImplementedError
+
+
 def file_extension_allowed(path: PathLike, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
     _, extension = splitext(path)
 
-    if whitelist and not strict_whitelisted(extension, whitelist):
-        return False
-
-    if blacklist and strict_blacklisted(extension, blacklist):
-        return False
-
-    return True
+    wl_result = strict_whitelisted(extension, whitelist) if whitelist else None
+    bl_result = strict_blacklisted(extension, blacklist) if blacklist else None
+    return __resolve_whitelist_blacklist_results(wl_result, bl_result)
 
 
 def file_extension_allowed_predicate(whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> Optional[WalkPredicate]:
@@ -61,19 +75,14 @@ def file_extension_allowed_predicate(whitelist: Optional[WhiteList] = None, blac
 
 def filter_by_file_extension(walk: OsWalk, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None, **filter_kwargs) -> OsWalk:
     pred = file_extension_allowed_predicate(whitelist, blacklist)
-    return filter_by_predicate(walk, pred, **filter_kwargs)
+    return filter_files_by_predicate(walk, pred, **filter_kwargs)
 
 
 def path_allowed(path: PathLike, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
     str_path = path.__fspath__()
-
-    if whitelist and not whitelisted(str_path, whitelist):
-        return False
-
-    if blacklist and blacklisted(str_path, blacklist):
-        return False
-
-    return True
+    wl_result = whitelisted(str_path, whitelist) if whitelist else None
+    bl_result = blacklisted(str_path, blacklist) if blacklist else None
+    return __resolve_whitelist_blacklist_results(wl_result, bl_result)
 
 
 def path_allowed_predicate(whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> Optional[WalkPredicate]:
