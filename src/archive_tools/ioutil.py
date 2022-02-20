@@ -5,6 +5,7 @@ from types import TracebackType
 from typing import BinaryIO, Union, Optional, Type, Iterator, AnyStr, Iterable
 
 from .error import ParsingError
+from .size import KiB
 from .structx import Struct
 
 StructAble = Union[Struct, str, bytes]
@@ -38,6 +39,11 @@ def end_of_stream(stream: BinaryIO) -> bool:
     then = stream.tell()
     stream.seek(now)
     return now == then
+
+
+def iter_read(stream: BinaryIO, chunk_size: int = 64 * KiB) -> Iterable[int]:
+    while has_data(stream):
+        yield stream.read(chunk_size)
 
 
 def abs_tell(stream: BinaryIO) -> int:

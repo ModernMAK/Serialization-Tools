@@ -3,7 +3,7 @@ import struct
 from typing import BinaryIO, Tuple, Any, Iterator, List
 
 from . import structx
-from .structio import as_hex_adr, BinaryWindow
+from .ioutil import as_hex_adr, BinaryWindow
 from .structx import Struct, _StructFormat, _BufferFormat
 
 WriteableBuffer = ReadableBuffer = _BufferFormat
