@@ -3,8 +3,8 @@ from os import PathLike
 from os.path import splitext, join
 from typing import Union, List, Tuple, Iterable, Callable, Optional
 
-Whitelist = Union[List[str], str]
-BlackList = Whitelist
+WhiteList = Union[List[str], str]
+BlackList = WhiteList
 
 OsWalkResult = Tuple[str, Iterable[str], Iterable[str]]
 OsWalk = Iterable[OsWalkResult]
@@ -12,14 +12,14 @@ OsWalk = Iterable[OsWalkResult]
 WalkPredicate = Callable[[str], bool]
 
 
-def strict_whitelisted(value: str, whitelist: Whitelist):
+def strict_whitelisted(value: str, whitelist: WhiteList):
     if not isinstance(whitelist, str):
         return value in whitelist
     else:
         return value == whitelist
 
 
-def whitelisted(value: str, whitelist: Whitelist):
+def whitelisted(value: str, whitelist: WhiteList):
     if not isinstance(whitelist, str):
         for word in whitelist:
             if word in value:
@@ -41,7 +41,7 @@ def blacklisted(value: str, blacklist: BlackList):
     return whitelisted(value, blacklist)
 
 
-def file_extension_allowed(path: PathLike, whitelist: Optional[Whitelist] = None, blacklist: Optional[BlackList] = None) -> bool:
+def file_extension_allowed(path: PathLike, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
     _, extension = splitext(path)
 
     if whitelist and not strict_whitelisted(extension, whitelist):
@@ -53,18 +53,18 @@ def file_extension_allowed(path: PathLike, whitelist: Optional[Whitelist] = None
     return True
 
 
-def file_extension_allowed_predicate(whitelist: Optional[Whitelist] = None, blacklist: Optional[BlackList] = None) -> Optional[WalkPredicate]:
+def file_extension_allowed_predicate(whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> Optional[WalkPredicate]:
     if not whitelist and not blacklist:
         return None
     return partial(file_extension_allowed, whitelist=whitelist, blacklist=blacklist)
 
 
-def filter_by_file_extension(walk: OsWalk, whitelist: Optional[Whitelist] = None, blacklist: Optional[BlackList] = None, **filter_kwargs) -> OsWalk:
+def filter_by_file_extension(walk: OsWalk, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None, **filter_kwargs) -> OsWalk:
     pred = file_extension_allowed_predicate(whitelist, blacklist)
     return filter_by_predicate(walk, pred, **filter_kwargs)
 
 
-def path_allowed(path: PathLike, whitelist: Optional[Whitelist] = None, blacklist: Optional[BlackList] = None) -> bool:
+def path_allowed(path: PathLike, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
     str_path = path.__fspath__()
 
     if whitelist and not whitelisted(str_path, whitelist):
@@ -76,13 +76,13 @@ def path_allowed(path: PathLike, whitelist: Optional[Whitelist] = None, blacklis
     return True
 
 
-def path_allowed_predicate(whitelist: Optional[Whitelist] = None, blacklist: Optional[BlackList] = None) -> Optional[WalkPredicate]:
+def path_allowed_predicate(whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> Optional[WalkPredicate]:
     if not whitelist and not blacklist:
         return None
     return partial(path_allowed, whitelist=whitelist, blacklist=blacklist)
 
 
-def filter_by_path(walk: OsWalk, whitelist: Optional[Whitelist] = None, blacklist: Optional[BlackList] = None, **filter_kwargs) -> OsWalk:
+def filter_by_path(walk: OsWalk, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None, **filter_kwargs) -> OsWalk:
     pred = path_allowed_predicate(whitelist, blacklist)
     return filter_by_predicate(walk, pred, **filter_kwargs)
 
