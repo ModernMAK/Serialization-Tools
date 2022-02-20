@@ -228,3 +228,4 @@ class StreamWindowPtr(StreamPtr, WindowPtr):
     def jump_to(self) -> BinaryIO:
         with self.stream_jump_to(self.stream) as inner:  # We don't have to use inner, but it makes it obvious that the inner stream has correctly jumped
             yield inner
+

@@ -1,11 +1,10 @@
 import struct
 from dataclasses import dataclass
 from os.path import join
-from typing import BinaryIO, Optional, Iterable, Any, Generator, Tuple
+from typing import BinaryIO, Optional, Iterable, Any, Generator
 
 from archive_tools.structx import Struct
-
-OsWalkResult = Tuple[str, Iterable[str], Iterable[str]]
+from archive_tools.walkutil import OsWalk
 
 
 def read_magic_word(stream: BinaryIO, layout: Struct, advance: bool = True) -> Optional[bytes]:
@@ -71,7 +70,7 @@ class MagicWordIO(MagicWord):
     # Pass in the os.walk() generator
     # Root and Folders will remain unchanged
     # Files will be replaced with files starting with the proper magic word
-    def walk(self, walk: Iterable[OsWalkResult]) -> Iterable[OsWalkResult]:
+    def walk(self, walk: OsWalk) -> OsWalk:
         for root, _, files in walk:
             chunky_files = (file for file in files if self.check_file(join(root, file)))
             yield root, _, chunky_files
