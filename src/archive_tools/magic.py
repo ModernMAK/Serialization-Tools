@@ -5,7 +5,7 @@ from typing import BinaryIO, Optional, Iterable, Any, Generator, Tuple
 
 from archive_tools.structx import Struct
 
-OsWalkResult: Tuple[str, Iterable[str], Iterable[str]]
+OsWalkResult = Tuple[str, Iterable[str], Iterable[str]]
 
 
 def read_magic_word(stream: BinaryIO, layout: Struct, advance: bool = True) -> Optional[bytes]:
