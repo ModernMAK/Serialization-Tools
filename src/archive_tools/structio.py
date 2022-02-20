@@ -8,14 +8,6 @@ from .error import ParsingError
 from .structx import Struct
 
 StructAble = Union[Struct, str, bytes]
-UInt8 = Struct("B")
-UInt16 = Struct("H")
-UInt32 = Struct("I")
-Int32 = Struct("i")
-UInt64 = Struct("Q")
-Int64 = Struct("q")
-Byte = Struct("c")
-
 StructFormat = Union[str, bytes]
 BufferFormat = Union[bytes, bytearray, memoryview, array, mmap]
 

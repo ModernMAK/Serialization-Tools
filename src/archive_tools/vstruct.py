@@ -3,10 +3,12 @@ import struct
 from typing import BinaryIO, Tuple, Any, Iterator, List
 
 from . import structx
-from .structio import UInt32, as_hex_adr, BinaryWindow
+from .structio import as_hex_adr, BinaryWindow
 from .structx import Struct, _StructFormat, _BufferFormat
 
 WriteableBuffer = ReadableBuffer = _BufferFormat
+
+_UInt32 = Struct("I")
 
 
 def unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Tuple[Any, ...]:
@@ -125,7 +127,7 @@ class _VarLenStruct(structx.Struct):
             return w
 
 
-def pack_len_encoded_str(value: str, length_layout: _StructFormat = UInt32, encoding: str = None) -> bytes:
+def pack_len_encoded_str(value: str, length_layout: _StructFormat = _UInt32, encoding: str = None) -> bytes:
     buffer = value.encode(encoding)
     len_buffer = struct.pack(length_layout, len(buffer))
     return len_buffer + buffer
