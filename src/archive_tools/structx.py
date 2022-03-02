@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import struct
 from struct import calcsize, unpack, pack
 from array import array
@@ -77,7 +78,33 @@ def pack_len_encoded_str(value: str, length_layout: _StructFormat = UInt32, enco
     return len_buffer + buffer
 
 
+_STRUCT_CHARS = r"cbB?hHiIlLqQnNefdpPs"
+struct_re = re.compile(rf"(?:([0-9]*)([{_STRUCT_CHARS}]))")  # 'x' is excluded because it is padding
+
+
+def count_args(fmt: str) -> int:
+    count = 0
+    pos = 0
+    while pos < len(fmt):
+        match = struct_re.search(fmt, pos)
+        if match is None:
+            break
+        else:
+            repeat = match.group(1)
+            code = match.group(2)
+            if code == "s":
+                count += 1
+            else:
+                count += int(repeat) if repeat else 1
+            pos = match.span()[1]
+    return count
+
+
 class Struct(struct.Struct):
+    def __init__(self, format: str):
+        super().__init__(format)
+        self.args = count_args(format)
+
     def unpack_stream(self, __stream: BinaryIO) -> Tuple[Any, ...]:
         buffer = __stream.read(self.size)
         return self.unpack(buffer)

@@ -18,8 +18,17 @@ def as_parsing_window(stream: BinaryIO) -> BinaryIO:
     start = abs_tell(stream)
     try:
         yield stream
+    except ParsingError as e:
+        raise # Dont wrap a parsing error
+    except KeyboardInterrupt as e:
+        raise  # Dont wrap a Keyboard Interrupt
     except BaseException as e:
-        raise ParsingError(start) from e
+        try:
+            now = abs_tell(stream)
+        except:
+            now = None
+            pass
+        raise ParsingError(start, now) from e
 
 
 def as_hex_adr(value: int, size: int = 4) -> str:
@@ -34,6 +43,8 @@ def has_data(stream: BinaryIO) -> bool:
 
 
 def end_of_stream(stream: BinaryIO) -> bool:
+    if isinstance(stream,BinaryWindow):
+        raise Exception("BinaryWindow really breaks this, until tests are done, use has_data")
     now = stream.tell()
     stream.seek(0, 2)
     then = stream.tell()
