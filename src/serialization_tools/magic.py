@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from os.path import join
 from typing import BinaryIO, Optional, Iterable, Any, Generator
 
-from archive_tools.structx import Struct
-from archive_tools.walkutil import OsWalk
+from .structx import Struct
+from .walkutil import OsWalk
 
 
 def read_magic_word(stream: BinaryIO, layout: Struct, advance: bool = True) -> Optional[bytes]:
