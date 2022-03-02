@@ -3,6 +3,7 @@
 
 # Installation
 Installing using pip:
+*Out of date; see mak-serial-tools on PyPI*
 ```
 pip install git+https://github.com/ModernMAK/ArchiveTools
 ```
