@@ -23,6 +23,10 @@ def unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Tuple[Any, ...
 unpack_from = struct.unpack_from
 
 
+def pack_into(fmt:str,buffer:_BufferFormat,offset:int,*args) -> int:
+    struct.pack_into(fmt,buffer,offset,*args)
+    return calcsize(fmt)
+
 def iter_unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Iterator[Tuple[Any, ...]]:
     size = calcsize(__format)
     while True:
@@ -126,7 +130,3 @@ class Struct(struct.Struct):
         buffer = self.pack(*v)
         return __stream.write(buffer)
 
-
-def pack_into(fmt:str,buffer:_BufferFormat,offset:int,*args) -> int:
-    struct.pack_into(fmt,buffer,offset,*args)
-    return calcsize(fmt)
