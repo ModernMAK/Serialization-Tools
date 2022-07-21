@@ -15,11 +15,12 @@ if sys.platform.startswith("win32"):
     from winreg import HKEY_LOCAL_MACHINE, OpenKey, QueryValueEx  # QueryValue fails for some reason?! Have to use QueryValueEx
 
 
-    def read_install_path_from_registry(sub_path: os.PathLike, bit_mode: int = 32) -> Optional[str]:
+    def read_install_path_from_registry(sub_path: os.PathLike[str], bit_mode: int = 32) -> str:
         key_path = _SOFTWARE_REG_ROOTS[bit_mode]
         full_path = key_path / sub_path
         with OpenKey(HKEY_LOCAL_MACHINE, str(full_path)) as key_handle:
-            return QueryValueEx(key_handle, _INSTALL_PATH)[0]
+            value:str = QueryValueEx(key_handle, _INSTALL_PATH)[0]
+            return value
 
 
 else:
@@ -35,7 +36,7 @@ def get_steam_install_dir() -> Path:
     return Path(steam)
 
 
-def get_appdata_dir(sub_dir: str = None) -> Path:
+def get_appdata_dir(sub_dir: Optional[str] = None) -> Path:
     path = Path("~/Appdata").expanduser()
     if sub_dir:
         path /= sub_dir

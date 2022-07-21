@@ -1,25 +1,26 @@
+import os
 from functools import partial
 from os import PathLike
 from os.path import splitext, join
-from typing import Union, List, Tuple, Iterable, Callable, Optional
+from typing import Union, List, Tuple, Iterable, Callable, Optional, AnyStr, Any, Dict
 
 WhiteList = Union[List[str], str]
 BlackList = WhiteList
 
-OsWalkResult = Tuple[str, Iterable[str], Iterable[str]]
+OsWalkResult = Tuple[str, List[str], List[str]]
 OsWalk = Iterable[OsWalkResult]
 
 WalkPredicate = Callable[[str], bool]
 
 
-def strict_whitelisted(value: str, whitelist: WhiteList):
+def strict_whitelisted(value: str, whitelist: WhiteList) -> bool:
     if not isinstance(whitelist, str):
         return value in whitelist
     else:
         return value == whitelist
 
 
-def whitelisted(value: str, whitelist: WhiteList):
+def whitelisted(value: str, whitelist: WhiteList) -> bool:
     if not isinstance(whitelist, str):
         for word in whitelist:
             if word in value:
@@ -29,13 +30,13 @@ def whitelisted(value: str, whitelist: WhiteList):
         return whitelist in value
 
 
-def strict_blacklisted(value: str, blacklist: BlackList):
+def strict_blacklisted(value: str, blacklist: BlackList) -> bool:
     # These are functionally, the same
     #   how we use them differs greatly
     return strict_whitelisted(value, blacklist)
 
 
-def blacklisted(value: str, blacklist: BlackList):
+def blacklisted(value: str, blacklist: BlackList) -> bool:
     # These are functionally, the same
     #   how we use them differs greatly
     return whitelisted(value, blacklist)
@@ -59,7 +60,7 @@ def __resolve_whitelist_blacklist_results(whitelist_result: Optional[bool], blac
         raise NotImplementedError
 
 
-def file_extension_allowed(path: PathLike, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
+def file_extension_allowed(path: PathLike[str], whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
     _, extension = splitext(path)
 
     wl_result = strict_whitelisted(extension, whitelist) if whitelist else None
@@ -73,12 +74,12 @@ def file_extension_allowed_predicate(whitelist: Optional[WhiteList] = None, blac
     return partial(file_extension_allowed, whitelist=whitelist, blacklist=blacklist)
 
 
-def filter_by_file_extension(walk: OsWalk, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None, **filter_kwargs) -> OsWalk:
+def filter_by_file_extension(walk: OsWalk, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None, **filter_kwargs:Any) -> OsWalk:
     pred = file_extension_allowed_predicate(whitelist, blacklist)
     return filter_files_by_predicate(walk, pred, **filter_kwargs)
 
 
-def path_allowed(path: Union[str,PathLike], whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
+def path_allowed(path: Union[str,PathLike[str]], whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
     if isinstance(path,PathLike):
         str_path = path.__fspath__()
     else:
@@ -94,12 +95,12 @@ def path_allowed_predicate(whitelist: Optional[WhiteList] = None, blacklist: Opt
     return partial(path_allowed, whitelist=whitelist, blacklist=blacklist)
 
 
-def filter_by_path(walk: OsWalk, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None, **filter_kwargs) -> OsWalk:
+def filter_by_path(walk: OsWalk, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None, **filter_kwargs:Any) -> OsWalk:
     pred = path_allowed_predicate(whitelist, blacklist)
     return filter_by_predicate(walk, pred, **filter_kwargs)
 
 
-def filter_files_by_predicate(walk: OsWalk, predicate: WalkPredicate, abs_path: bool = False) -> OsWalk:
+def filter_files_by_predicate(walk: OsWalk, predicate: Optional[WalkPredicate], abs_path: bool = False) -> OsWalk:
     """
     Filters a walk's file collection using the given predicate.
 
@@ -114,9 +115,9 @@ def filter_files_by_predicate(walk: OsWalk, predicate: WalkPredicate, abs_path: 
 
     for root, _, files in walk:
         if abs_path:
-            valid = (f for f in files if predicate(join(root, f)))
+            valid = [f for f in files if predicate(join(root, f))]
         else:
-            valid = (f for f in files if predicate(f))
+            valid = [f for f in files if predicate(f)]
         yield root, _, valid
 
 
@@ -134,9 +135,9 @@ def filter_folders_by_predicate(walk: OsWalk, predicate: WalkPredicate, abs_path
 
     for root, folders, _ in walk:
         if abs_path:
-            valid = (f for f in folders if predicate(join(root, f)))
+            valid = [f for f in folders if predicate(join(root, f))]
         else:
-            valid = (f for f in folders if predicate(f))
+            valid = [f for f in folders if predicate(f)]
 
         if prune:
             folders[:] = list(valid)
@@ -144,7 +145,7 @@ def filter_folders_by_predicate(walk: OsWalk, predicate: WalkPredicate, abs_path
         yield root, valid, _
 
 
-def filter_by_predicate(walk: OsWalk, predicate: WalkPredicate, abs_path: bool = False, prune: bool = False) -> OsWalk:
+def filter_by_predicate(walk: OsWalk, predicate: Optional[WalkPredicate], abs_path: bool = False, prune: bool = False) -> OsWalk:
     """
     Filters a walk's folder AND file collection using the given predicate.
 
@@ -158,11 +159,11 @@ def filter_by_predicate(walk: OsWalk, predicate: WalkPredicate, abs_path: bool =
 
     for root, folders, files in walk:
         if abs_path:
-            valid_folders = (f for f in folders if predicate(join(root, f)))
-            valid_files = (f for f in files if predicate(join(root, f)))
+            valid_folders = [f for f in folders if predicate(join(root, f))]
+            valid_files = [f for f in files if predicate(join(root, f))]
         else:
-            valid_folders = (f for f in folders if predicate(f))
-            valid_files = (f for f in files if predicate(f))
+            valid_folders = [f for f in folders if predicate(f)]
+            valid_files = [f for f in files if predicate(f)]
 
         if prune:
             folders[:] = list(valid_folders)
