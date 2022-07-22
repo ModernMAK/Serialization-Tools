@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import PureWindowsPath as RegPath, Path
-from typing import Optional
+from typing import Optional, Union
 
 _VALVE_REG_PATH = RegPath(r"Valve\Steam")
 _INSTALL_PATH = "InstallPath"
@@ -19,7 +19,7 @@ if sys.platform.startswith("win32"):
     )  # QueryValue fails for some reason?! Have to use QueryValueEx
 
     def read_install_path_from_registry(
-        sub_path: os.PathLike[str], bit_mode: int = 32
+        sub_path: Union[str,os.PathLike[str]], bit_mode: int = 32
     ) -> str:
         key_path = _SOFTWARE_REG_ROOTS[bit_mode]
         full_path = key_path / sub_path
@@ -30,12 +30,13 @@ if sys.platform.startswith("win32"):
 else:
 
     def read_install_path_from_registry(
-        sub_path: str, bit_mode: int = 32
-    ) -> Optional[str]:
+        sub_path: Union[str,os.PathLike[str]], bit_mode: int = 32
+    ) -> str:
         raise TypeError("Not supported on non-windows platforms")
 
 
 def get_steam_install_dir() -> Path:
+    steam:str
     try:  # Try 64 bit first
         steam = read_install_path_from_registry(_VALVE_REG_PATH, 64)
     except FileNotFoundError:  # otherwise, try 32 bit

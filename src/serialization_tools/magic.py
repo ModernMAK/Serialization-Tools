@@ -8,12 +8,12 @@ from .walkutil import OsWalk
 
 
 def read_magic_word(
-    stream: BinaryIO, layout: Struct, advance: bool = True
+        stream: BinaryIO, layout: Struct, advance: bool = True
 ) -> Optional[bytes]:
     origin = stream.tell()
     try:
         result: Any = layout.unpack_stream(stream)[0]
-        return result
+        return result  # type: ignore # TODO: this needs a rewrite to be type-safe, which I won't be doing now
     except (struct.error, UnicodeDecodeError):
         return None
     finally:
@@ -22,14 +22,14 @@ def read_magic_word(
 
 
 def assert_magic_word(
-    stream: BinaryIO, layout: Struct, word: bytes, advance: bool = True
+        stream: BinaryIO, layout: Struct, word: bytes, advance: bool = True
 ) -> None:
     magic = read_magic_word(stream, layout=layout, advance=advance)
     assert magic == word, (magic, word)
 
 
 def check_magic_word(
-    stream: BinaryIO, layout: Struct, word: bytes, advance: bool = True
+        stream: BinaryIO, layout: Struct, word: bytes, advance: bool = True
 ) -> bool:
     magic = read_magic_word(stream, layout=layout, advance=advance)
     return magic == word
@@ -46,7 +46,7 @@ class MagicWord:
     word: bytes
 
     def read_magic_word(
-        self, stream: BinaryIO, advance: bool = True
+            self, stream: BinaryIO, advance: bool = True
     ) -> Optional[bytes]:
         return read_magic_word(stream, self.layout, advance)
 
@@ -73,7 +73,7 @@ class MagicWordIO(MagicWord):
             return self.check_stream(handle, True)
 
     def iter_check_file(
-        self, files: Iterable[str], root: Optional[str] = None
+            self, files: Iterable[str], root: Optional[str] = None
     ) -> Generator[str, None, None]:
         return (file for file in files if self.check_file(file, root))
 

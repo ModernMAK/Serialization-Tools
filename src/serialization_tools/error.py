@@ -12,7 +12,7 @@ class ParsingError(BaseException):
         return f"@ {self.stream_pos}"
 
 
-class Nameable(Protocol):  # TODO see if there is a protocol in stdlib
+class Nameable(Protocol):
     __name__: str
 
 
