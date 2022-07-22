@@ -16,5 +16,9 @@ class Nameable(Protocol):  # TODO see if there is a protocol in stdlib
     __name__: str
 
 
-def packing_args_error(cls: Nameable, func: Nameable, received_args: int, expected_args: int) -> struct.error:
-    return struct.error(f"`{cls.__name__}.{func.__name__}` expected `{expected_args}` items for packing (got `{received_args}`)")
+def packing_args_error(
+    cls: Nameable, func: Nameable, received_args: int, expected_args: int
+) -> struct.error:
+    return struct.error(
+        f"`{cls.__name__}.{func.__name__}` expected `{expected_args}` items for packing (got `{received_args}`)"
+    )

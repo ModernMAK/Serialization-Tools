@@ -42,7 +42,9 @@ def blacklisted(value: str, blacklist: BlackList) -> bool:
     return whitelisted(value, blacklist)
 
 
-def __resolve_whitelist_blacklist_results(whitelist_result: Optional[bool], blacklist_result: Optional[bool]) -> bool:
+def __resolve_whitelist_blacklist_results(
+    whitelist_result: Optional[bool], blacklist_result: Optional[bool]
+) -> bool:
     # If whitelist only
     #   Assume blacklist is remaining 'Universe'
     # If blacklist only
@@ -60,7 +62,11 @@ def __resolve_whitelist_blacklist_results(whitelist_result: Optional[bool], blac
         raise NotImplementedError
 
 
-def file_extension_allowed(path: PathLike[str], whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
+def file_extension_allowed(
+    path: PathLike[str],
+    whitelist: Optional[WhiteList] = None,
+    blacklist: Optional[BlackList] = None,
+) -> bool:
     _, extension = splitext(path)
 
     wl_result = strict_whitelisted(extension, whitelist) if whitelist else None
@@ -68,19 +74,30 @@ def file_extension_allowed(path: PathLike[str], whitelist: Optional[WhiteList] =
     return __resolve_whitelist_blacklist_results(wl_result, bl_result)
 
 
-def file_extension_allowed_predicate(whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> Optional[WalkPredicate]:
+def file_extension_allowed_predicate(
+    whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None
+) -> Optional[WalkPredicate]:
     if not whitelist and not blacklist:
         return None
     return partial(file_extension_allowed, whitelist=whitelist, blacklist=blacklist)
 
 
-def filter_by_file_extension(walk: OsWalk, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None, **filter_kwargs:Any) -> OsWalk:
+def filter_by_file_extension(
+    walk: OsWalk,
+    whitelist: Optional[WhiteList] = None,
+    blacklist: Optional[BlackList] = None,
+    **filter_kwargs: Any
+) -> OsWalk:
     pred = file_extension_allowed_predicate(whitelist, blacklist)
     return filter_files_by_predicate(walk, pred, **filter_kwargs)
 
 
-def path_allowed(path: Union[str,PathLike[str]], whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> bool:
-    if isinstance(path,PathLike):
+def path_allowed(
+    path: Union[str, PathLike[str]],
+    whitelist: Optional[WhiteList] = None,
+    blacklist: Optional[BlackList] = None,
+) -> bool:
+    if isinstance(path, PathLike):
         str_path = path.__fspath__()
     else:
         str_path = path
@@ -89,18 +106,27 @@ def path_allowed(path: Union[str,PathLike[str]], whitelist: Optional[WhiteList] 
     return __resolve_whitelist_blacklist_results(wl_result, bl_result)
 
 
-def path_allowed_predicate(whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None) -> Optional[WalkPredicate]:
+def path_allowed_predicate(
+    whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None
+) -> Optional[WalkPredicate]:
     if not whitelist and not blacklist:
         return None
     return partial(path_allowed, whitelist=whitelist, blacklist=blacklist)
 
 
-def filter_by_path(walk: OsWalk, whitelist: Optional[WhiteList] = None, blacklist: Optional[BlackList] = None, **filter_kwargs:Any) -> OsWalk:
+def filter_by_path(
+    walk: OsWalk,
+    whitelist: Optional[WhiteList] = None,
+    blacklist: Optional[BlackList] = None,
+    **filter_kwargs: Any
+) -> OsWalk:
     pred = path_allowed_predicate(whitelist, blacklist)
     return filter_by_predicate(walk, pred, **filter_kwargs)
 
 
-def filter_files_by_predicate(walk: OsWalk, predicate: Optional[WalkPredicate], abs_path: bool = False) -> OsWalk:
+def filter_files_by_predicate(
+    walk: OsWalk, predicate: Optional[WalkPredicate], abs_path: bool = False
+) -> OsWalk:
     """
     Filters a walk's file collection using the given predicate.
 
@@ -121,7 +147,9 @@ def filter_files_by_predicate(walk: OsWalk, predicate: Optional[WalkPredicate], 
         yield root, _, valid
 
 
-def filter_folders_by_predicate(walk: OsWalk, predicate: WalkPredicate, abs_path: bool = False, prune: bool = False) -> OsWalk:
+def filter_folders_by_predicate(
+    walk: OsWalk, predicate: WalkPredicate, abs_path: bool = False, prune: bool = False
+) -> OsWalk:
     """
     Filters a walk's folder collection using the given predicate.
 
@@ -145,7 +173,12 @@ def filter_folders_by_predicate(walk: OsWalk, predicate: WalkPredicate, abs_path
         yield root, valid, _
 
 
-def filter_by_predicate(walk: OsWalk, predicate: Optional[WalkPredicate], abs_path: bool = False, prune: bool = False) -> OsWalk:
+def filter_by_predicate(
+    walk: OsWalk,
+    predicate: Optional[WalkPredicate],
+    abs_path: bool = False,
+    prune: bool = False,
+) -> OsWalk:
     """
     Filters a walk's folder AND file collection using the given predicate.
 

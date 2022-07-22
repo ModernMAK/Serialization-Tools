@@ -3,7 +3,18 @@ from array import array
 from contextlib import contextmanager
 from mmap import mmap
 from types import TracebackType
-from typing import BinaryIO, Union, Optional, Type, Iterator, AnyStr, Iterable, Generator, Any, TypeVar
+from typing import (
+    BinaryIO,
+    Union,
+    Optional,
+    Type,
+    Iterator,
+    AnyStr,
+    Iterable,
+    Generator,
+    Any,
+    TypeVar,
+)
 
 from .error import ParsingError
 from .size import KiB
@@ -47,7 +58,9 @@ def has_data(stream: BinaryIO) -> bool:
 
 def end_of_stream(stream: BinaryIO) -> bool:
     if isinstance(stream, BinaryWindow):
-        raise Exception("BinaryWindow really breaks this, until tests are done, use has_data")
+        raise Exception(
+            "BinaryWindow really breaks this, until tests are done, use has_data"
+        )
     now = stream.tell()
     stream.seek(0, 2)
     then = stream.tell()
@@ -97,7 +110,6 @@ class StreamPtr(Ptr):
 
 
 class BinaryWindow(BinaryIO):
-
     @classmethod
     def slice(cls, stream: BinaryIO, size: Optional[int] = None) -> BinaryWindow:
         now = stream.tell()
@@ -207,11 +219,16 @@ class BinaryWindow(BinaryIO):
     def __iter__(self) -> Iterator[AnyStr]:
         raise NotImplementedError
 
-    def __exit__(self, t: Optional[Type[BaseException]], value: Optional[BaseException], traceback: Optional[TracebackType]) -> None:
+    def __exit__(
+        self,
+        t: Optional[Type[BaseException]],
+        value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
         return None
         # return self.__stream.__exit__(t, value, traceback) # CAN'T CALL BASE BECAUSE IT CLOSES STREAM
 
-    def __enter__(self) -> 'BinaryWindow':
+    def __enter__(self) -> "BinaryWindow":
         return self
 
     @contextmanager
@@ -233,12 +250,20 @@ class WindowPtr(Ptr):
 
 
 class StreamWindowPtr(StreamPtr, WindowPtr):
-    def __init__(self, stream: BinaryIO, offset: Optional[int] = None, size: Optional[int] = None,  whence: int = 0):
+    def __init__(
+        self,
+        stream: BinaryIO,
+        offset: Optional[int] = None,
+        size: Optional[int] = None,
+        whence: int = 0,
+    ):
         offset = offset if offset is not None else stream.tell()
         StreamPtr.__init__(self, stream, offset, whence)
         WindowPtr.__init__(self, offset, size, whence)
 
     @contextmanager
-    def jump_to(self) -> Generator[BinaryIO,None,None]:
-        with self.stream_jump_to(self.stream) as inner:  # We don't have to use inner, but it makes it obvious that the inner stream has correctly jumped
+    def jump_to(self) -> Generator[BinaryIO, None, None]:
+        with self.stream_jump_to(
+            self.stream
+        ) as inner:  # We don't have to use inner, but it makes it obvious that the inner stream has correctly jumped
             yield inner

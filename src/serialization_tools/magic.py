@@ -7,10 +7,13 @@ from .structx import Struct
 from .walkutil import OsWalk
 
 
-def read_magic_word(stream: BinaryIO, layout: Struct, advance: bool = True) -> Optional[bytes]:
+def read_magic_word(
+    stream: BinaryIO, layout: Struct, advance: bool = True
+) -> Optional[bytes]:
     origin = stream.tell()
     try:
-        return layout.unpack_stream(stream)[0]
+        result: Any = layout.unpack_stream(stream)[0]
+        return result
     except (struct.error, UnicodeDecodeError):
         return None
     finally:
@@ -18,12 +21,16 @@ def read_magic_word(stream: BinaryIO, layout: Struct, advance: bool = True) -> O
             stream.seek(origin)
 
 
-def assert_magic_word(stream: BinaryIO, layout: Struct, word: bytes, advance: bool = True) -> None:
+def assert_magic_word(
+    stream: BinaryIO, layout: Struct, word: bytes, advance: bool = True
+) -> None:
     magic = read_magic_word(stream, layout=layout, advance=advance)
     assert magic == word, (magic, word)
 
 
-def check_magic_word(stream: BinaryIO, layout: Struct, word: bytes, advance: bool = True) -> bool:
+def check_magic_word(
+    stream: BinaryIO, layout: Struct, word: bytes, advance: bool = True
+) -> bool:
     magic = read_magic_word(stream, layout=layout, advance=advance)
     return magic == word
 
@@ -38,7 +45,9 @@ class MagicWord:
     layout: Struct
     word: bytes
 
-    def read_magic_word(self, stream: BinaryIO, advance: bool = True) -> Optional[bytes]:
+    def read_magic_word(
+        self, stream: BinaryIO, advance: bool = True
+    ) -> Optional[bytes]:
         return read_magic_word(stream, self.layout, advance)
 
     def write_magic_word(self, stream: BinaryIO) -> int:
@@ -53,7 +62,6 @@ class MagicWord:
 
 @dataclass
 class MagicWordIO(MagicWord):
-
     def check_stream(self, stream: BinaryIO, advance_stream: bool = False) -> bool:
         return self.check_magic_word(stream, advance=advance_stream)
 
@@ -64,7 +72,9 @@ class MagicWordIO(MagicWord):
             # we set advance to true to avoid pointlessly fixing the stream, since we are just going to close it
             return self.check_stream(handle, True)
 
-    def iter_check_file(self, files: Iterable[str], root: Optional[str] = None) -> Generator[str, None, None]:
+    def iter_check_file(
+        self, files: Iterable[str], root: Optional[str] = None
+    ) -> Generator[str, None, None]:
         return (file for file in files if self.check_file(file, root))
 
     # Pass in the os.walk() generator

@@ -1,12 +1,12 @@
 import re
 import struct
-from typing import BinaryIO, Tuple, Any, Iterator, List, Dict
+from ctypes import _CData
+from pickle import PickleBuffer
+from typing import BinaryIO, Tuple, Any, Iterator, List, Dict, Union, Optional
 
 from . import structx
 from .ioutil import as_hex_adr, BinaryWindow
-from .structx import Struct, _StructFormat, _BufferFormat
-
-WriteableBuffer = ReadableBuffer = _BufferFormat
+from .structx import Struct, _StructFormat, WriteableBuffer, ReadableBuffer
 
 _UInt32 = Struct("I")
 
@@ -15,11 +15,13 @@ def unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Tuple[Any, ...
     raise NotImplementedError
 
 
-def iter_unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Iterator[Tuple[Any, ...]]:
+def iter_unpack_stream(
+    __format: _StructFormat, __stream: BinaryIO
+) -> Iterator[Tuple[Any, ...]]:
     raise NotImplementedError
 
 
-def pack_stream(fmt: _StructFormat, __stream: BinaryIO, *v) -> int:
+def pack_stream(fmt: _StructFormat, __stream: BinaryIO, *v: Any) -> int:
     raise NotImplementedError
 
 
@@ -31,12 +33,14 @@ class _VarLenStruct(structx.Struct):
     __Int32 = structx.Struct("i")
     __UInt32 = structx.Struct("I")
     __map: Dict[str, structx.Struct] = {
-        'v': __Int32, 'V': __UInt32,
-        'p': __Int8, 'P': __UInt8
+        "v": __Int32,
+        "V": __UInt32,
+        "p": __Int8,
+        "P": __UInt8,
     }
 
     @classmethod
-    def __get_struct(cls, size_code: str, layout_code: str = None):
+    def __get_struct(cls, size_code: str, layout_code: Optional[str] = None) -> Struct:
         if not layout_code:
             return cls.__map[size_code]
         else:
@@ -46,13 +50,13 @@ class _VarLenStruct(structx.Struct):
                 cls.__map[full] = structx.Struct(layout_code + true_size_code)
             return cls.__map[full]
 
-    def __get_my_struct(self):
+    def __get_my_struct(self) -> Struct:
         return self.__get_struct(self.char, self.layout)
 
     # noinspection PyMissingConstructor
     # We explicitly do not want to call super
     def __init__(self, fmt: str):
-        self.layout = fmt[0]
+        self.layout: Optional[str] = fmt[0]
         if self.layout not in ["@<>=!"]:
             self.layout = None
         self.char = fmt[-1]
@@ -62,7 +66,7 @@ class _VarLenStruct(structx.Struct):
             self.length = 1
 
     @property
-    def size(self) -> int:
+    def size(self) -> int:  # type: ignore # this appears to be a property in struct.Struct but mypy whines that it's not the same
         return self.__get_my_struct().size * self.length
 
     def unpack(self, __buffer: ReadableBuffer) -> Tuple[Any, ...]:
@@ -71,10 +75,15 @@ class _VarLenStruct(structx.Struct):
     def unpack_size(self, __buffer: ReadableBuffer) -> Tuple[Tuple[Any, ...], int]:
         return self.unpack_from_size(__buffer, 0)
 
-    def unpack_from(self, buffer: ReadableBuffer, offset: int = ...) -> Tuple[Any, ...]:
+    def unpack_from(self, buffer: ReadableBuffer, offset: int = 0) -> Tuple[Any, ...]:
         return self.unpack_from_size(buffer, offset)[0]
 
-    def unpack_from_size(self, buffer: ReadableBuffer, offset: int = ...) -> Tuple[Tuple[Any, ...], int]:
+    def unpack_from_size(
+        self, buffer: ReadableBuffer, offset: int = 0
+    ) -> Tuple[Tuple[Any, ...], int]:
+        if isinstance(buffer, (_CData, PickleBuffer)):
+            raise TypeError("Not currently supported)")
+
         s_layout = self.__get_my_struct()
         p = []
         buf_len = len(buffer)
@@ -84,7 +93,7 @@ class _VarLenStruct(structx.Struct):
             o += s_layout.size
             if o + s > buf_len:
                 raise NotImplementedError
-            v = buffer[o:o + s]
+            v = buffer[o : o + s]
 
             p.append(v)
             o += s
@@ -99,7 +108,18 @@ class _VarLenStruct(structx.Struct):
         now = __stream.tell()
         for _ in range(self.length):
             s: int = s_layout.unpack_stream(__stream)[0]
-            assert s >= 0, (s, "@", as_hex_adr((__stream.abs_tell() if isinstance(__stream, BinaryWindow) else __stream.tell()) - 4))  # TODO REMOVE DEBUG
+            assert s >= 0, (
+                s,
+                "@",
+                as_hex_adr(
+                    (
+                        __stream.abs_tell()
+                        if isinstance(__stream, BinaryWindow)
+                        else __stream.tell()
+                    )
+                    - 4
+                ),
+            )  # TODO REMOVE DEBUG
             v: bytes = __stream.read(s)
             assert len(v) == s, (len(v), s)
             p.append(v)
@@ -120,14 +140,19 @@ class _VarLenStruct(structx.Struct):
                 r.extend(val)
             return r
 
-    def pack_into(self, buffer: WriteableBuffer, offset: int, *v: Any) -> None:
+    def pack_into(
+        self, buffer: WriteableBuffer, offset: int, *v: Union[bytes, bytearray]
+    ) -> None:
         s_layout = self.__get_my_struct()
+        if isinstance(buffer, (_CData, PickleBuffer)):
+            raise TypeError("Not currently supported)")
+
         if len(v) != self.length:
             raise ValueError
         else:
             o = offset
             for val in v:
-                if not isinstance(val, (bytes, bytearray)):
+                if isinstance(val, (bytes, bytearray)):
                     raise ValueError
                 s_layout.pack_into(buffer, o, len(val))
                 o += s_layout.size
@@ -136,7 +161,7 @@ class _VarLenStruct(structx.Struct):
                     buffer[o + i] = val[i]
                 o += len(val)
 
-    def pack_stream(self, __stream: BinaryIO, *v) -> int:
+    def pack_stream(self, __stream: BinaryIO, *v: Any) -> int:
         s_layout = self.__get_my_struct()
         if len(v) != self.length:
             raise ValueError
@@ -150,13 +175,15 @@ class _VarLenStruct(structx.Struct):
             return w
 
 
-def pack_len_encoded_str(value: str, length_layout: _StructFormat = _UInt32, encoding: str = None) -> bytes:
+def pack_len_encoded_str(
+    value: str, length_layout: Struct = _UInt32, encoding: str = "ascii"
+) -> bytes:
     buffer = value.encode(encoding)
-    len_buffer = struct.pack(length_layout, len(buffer))
+    len_buffer = length_layout.pack(len(buffer))
     return len_buffer + buffer
 
 
-v_len_re = re.compile(fr"([<>=!@]?[0-9]*[{_VarLenStruct.SPECIAL}])")
+v_len_re = re.compile(rf"([<>=!@]?[0-9]*[{_VarLenStruct.SPECIAL}])")
 
 
 def separate_vlen_format(fmt: str) -> List[str]:
@@ -171,16 +198,17 @@ def separate_vlen_format(fmt: str) -> List[str]:
         else:
             s = match.span()
             if s[0] != pos:
-                parts.append(fmt[pos:s[0]])
-            parts.append(fmt[s[0]:s[1]])
+                parts.append(fmt[pos : s[0]])
+            parts.append(fmt[s[0] : s[1]])
             pos = s[1]
     return parts
 
 
 def parse_vlen_format(fmt: List[str]) -> List[Struct]:
-    p = []
+    p: List[Struct] = []
     for f in fmt:
         f = f.strip()  # ensures format has no whitespace before '<=>@' characters
+        s: Struct
         if any(c in f for c in _VarLenStruct.SPECIAL):
             s = _VarLenStruct(f)  # Special struct for VLen handling
         else:
@@ -190,7 +218,7 @@ def parse_vlen_format(fmt: List[str]) -> List[Struct]:
 
 
 class VStruct:
-    """ WARNING 'p' & 'P' are altered represent a sbyte vlen and byte vlen respectively """
+    """WARNING 'p' & 'P' are altered represent a sbyte vlen and byte vlen respectively"""
 
     # 32bit "v" character represents a variable length byte object
     # v Int32 ~ V UInt32
@@ -211,24 +239,28 @@ class VStruct:
 
     @property
     def args(self) -> int:
-        if self.__multi_layout:
+        if self.__multi_layout is not None:
             s = 0
             for f in self.__multi_layout:
                 s += f.args
             return s
-        else:
+        elif self.__layout is not None:
             return self.__layout.args
+        else:
+            raise TypeError("VStruct has no layout!")
 
     @property
     def min_size(self) -> int:
         if self.is_variable_size:
-            if self.__layout:
+            if self.__layout is not None:
                 return self.__layout.size
-            else:
+            elif self.__multi_layout is not None:
                 s = 0
                 for f in self.__multi_layout:
                     s += f.size
                 return s
+            else:
+                raise TypeError("VStruct has no layout!")
         else:
             return self.size
 
@@ -236,18 +268,22 @@ class VStruct:
     def size(self) -> int:
         if self.is_variable_size:
             raise NotImplementedError
-        else:
+        elif self.__layout is not None:
             return self.__layout.size
-
-    def unpack(self, __buffer: _BufferFormat) -> Tuple[Any, ...]:
-        if self.__multi_layout:
-            return self.unpack_from(__buffer, 0)
         else:
-            return self.__layout.unpack(__buffer)
+            raise TypeError("VStruct has no layout!")
 
-    def unpack_from(self, __buffer: _BufferFormat, offset: int = ...) -> Tuple[Any, ...]:
-        if self.__multi_layout:
-            unpacked = []
+    def unpack(self, __buffer: ReadableBuffer) -> Tuple[Any, ...]:
+        if self.__multi_layout is not None:
+            return self.unpack_from(__buffer, 0)
+        elif self.__layout is not None:
+            return self.__layout.unpack(__buffer)
+        else:
+            raise TypeError("VStruct has no layout!")
+
+    def unpack_from(self, __buffer: ReadableBuffer, offset: int = 0) -> Tuple[Any, ...]:
+        if self.__multi_layout is not None:
+            unpacked: List[Any] = []
             o = offset
             for part in self.__multi_layout:
                 if isinstance(part, _VarLenStruct):
@@ -258,18 +294,22 @@ class VStruct:
                 o += s
                 unpacked.extend(v)
             return tuple(unpacked)
-        else:
+        elif self.__layout is not None:
             return self.__layout.unpack_from(__buffer, offset)
+        else:
+            raise TypeError("VStruct has no layout!")
 
     def unpack_stream(self, stream: BinaryIO) -> Tuple[Any, ...]:
-        if self.__multi_layout:
-            unpacked = []
+        if self.__multi_layout is not None:
+            unpacked: List[Any] = []
             for part in self.__multi_layout:
                 v = part.unpack_stream(stream)
                 unpacked.extend(v)
             return tuple(unpacked)
-        else:
+        elif self.__layout is not None:
             return self.__layout.unpack_stream(stream)
+        else:
+            raise TypeError("VStruct has no layout!")
 
     def iter_unpack_stream(self, __stream: BinaryIO) -> Iterator[Tuple[Any, ...]]:
         while True:
@@ -284,17 +324,21 @@ class VStruct:
                 else:
                     break  # End of Stream; job's done
 
-    def pack_stream(self, __stream: BinaryIO, *v) -> int:
+    def pack_stream(self, __stream: BinaryIO, *v: Any) -> int:
         if self.__layout:
             return self.__layout.pack_stream(__stream, *v)
-        else:
+        elif self.__multi_layout:
             if len(v) != self.args:
-                raise struct.error(f"pack_stream expected {self.args} items for packing (got {len(v)})")
+                raise struct.error(
+                    f"pack_stream expected {self.args} items for packing (got {len(v)})"
+                )
 
             written = 0
             offset = 0
             for sub in self.__multi_layout:
-                sub_v = v[offset:offset + sub.args]
+                sub_v = v[offset : offset + sub.args]
                 offset += sub.args
                 written += sub.pack_stream(__stream, *sub_v)
             return written
+        else:
+            raise TypeError("VStruct has no layout!")
