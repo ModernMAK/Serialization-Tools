@@ -1,6 +1,6 @@
 import re
 import struct
-from ctypes import _CData
+from ctypes import _CData # pylint: disable=no-name-in-module
 from pickle import PickleBuffer
 from typing import BinaryIO, Tuple, Any, Iterator, List, Dict, Union, Optional
 
@@ -16,7 +16,7 @@ def unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Tuple[Any, ...
 
 
 def iter_unpack_stream(
-    __format: _StructFormat, __stream: BinaryIO
+        __format: _StructFormat, __stream: BinaryIO
 ) -> Iterator[Tuple[Any, ...]]:
     raise NotImplementedError
 
@@ -55,7 +55,7 @@ class _VarLenStruct(structx.Struct):
 
     # noinspection PyMissingConstructor
     # We explicitly do not want to call super
-    def __init__(self, fmt: str):
+    def __init__(self, fmt: str):  # pylint: disable=super-init-not-called
         self.layout: Optional[str] = fmt[0]
         if self.layout not in ["@<>=!"]:
             self.layout = None
@@ -79,7 +79,7 @@ class _VarLenStruct(structx.Struct):
         return self.unpack_from_size(buffer, offset)[0]
 
     def unpack_from_size(
-        self, buffer: ReadableBuffer, offset: int = 0
+            self, buffer: ReadableBuffer, offset: int = 0
     ) -> Tuple[Tuple[Any, ...], int]:
         if isinstance(buffer, (_CData, PickleBuffer)):
             raise TypeError("Not currently supported)")
@@ -93,7 +93,7 @@ class _VarLenStruct(structx.Struct):
             o += s_layout.size
             if o + s > buf_len:
                 raise NotImplementedError
-            v = buffer[o : o + s]
+            v = buffer[o: o + s]
 
             p.append(v)
             o += s
@@ -141,7 +141,7 @@ class _VarLenStruct(structx.Struct):
             return r
 
     def pack_into(
-        self, buffer: WriteableBuffer, offset: int, *v: Union[bytes, bytearray]
+            self, buffer: WriteableBuffer, offset: int, *v: Union[bytes, bytearray]
     ) -> None:
         s_layout = self.__get_my_struct()
         if isinstance(buffer, (_CData, PickleBuffer)):
@@ -176,7 +176,7 @@ class _VarLenStruct(structx.Struct):
 
 
 def pack_len_encoded_str(
-    value: str, length_layout: Struct = _UInt32, encoding: str = "ascii"
+        value: str, length_layout: Struct = _UInt32, encoding: str = "ascii"
 ) -> bytes:
     buffer = value.encode(encoding)
     len_buffer = length_layout.pack(len(buffer))
@@ -187,7 +187,6 @@ v_len_re = re.compile(rf"([<>=!@]?[0-9]*[{_VarLenStruct.SPECIAL}])")
 
 
 def separate_vlen_format(fmt: str) -> List[str]:
-    layout_and_alignment = fmt.lstrip()[0]
     pos = 0
     parts = []
     while pos < len(fmt):
@@ -198,8 +197,8 @@ def separate_vlen_format(fmt: str) -> List[str]:
         else:
             s = match.span()
             if s[0] != pos:
-                parts.append(fmt[pos : s[0]])
-            parts.append(fmt[s[0] : s[1]])
+                parts.append(fmt[pos: s[0]])
+            parts.append(fmt[s[0]: s[1]])
             pos = s[1]
     return parts
 
@@ -336,7 +335,7 @@ class VStruct:
             written = 0
             offset = 0
             for sub in self.__multi_layout:
-                sub_v = v[offset : offset + sub.args]
+                sub_v = v[offset: offset + sub.args]
                 offset += sub.args
                 written += sub.pack_stream(__stream, *sub_v)
             return written

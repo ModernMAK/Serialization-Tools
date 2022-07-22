@@ -162,10 +162,9 @@ class BinaryWindow(BinaryIO):
     def read(self, n: int = -1) -> bytes:
         if n == -1:
             return self._stream.read(self.__remaining_bytes)
-        elif self.__remaining_bytes >= n:
+        if self.__remaining_bytes >= n:
             return self._stream.read(n)
-        else:
-            return self._stream.read(self.__remaining_bytes)
+        return self._stream.read(self.__remaining_bytes)
 
     def readable(self) -> bool:
         return self._stream.readable()

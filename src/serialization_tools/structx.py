@@ -14,7 +14,7 @@ from mmap import mmap
 from typing import Union, BinaryIO, Tuple, Any, Iterator, List
 
 _StructFormat = Union[str, bytes]
-WriteableBuffer = Union[bytearray, memoryview, array[Any], mmap, _CData, PickleBuffer]
+WriteableBuffer = Union[bytearray, memoryview, array, mmap, _CData, PickleBuffer]
 ReadableBuffer = Union[bytes, WriteableBuffer]
 
 _Byte = struct.Struct("c")
@@ -149,9 +149,9 @@ class Struct(struct.Struct):
             buffer = __stream.read(self.size)
             if len(buffer) == 0:  # End of Stream; job's done
                 break
-            elif (
-                len(buffer) != self.size
-            ):  # End of Stream BUT can't unpack, raise an error
+            elif                 len(buffer) != self.size:
+
+                # End of Stream BUT can't unpack, raise an error
                 raise NotImplementedError  # TODO
             else:
                 yield self.unpack(buffer)

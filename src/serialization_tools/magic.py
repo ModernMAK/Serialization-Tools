@@ -13,7 +13,8 @@ def read_magic_word(
     origin = stream.tell()
     try:
         result: Any = layout.unpack_stream(stream)[0]
-        return result  # type: ignore # TODO: this needs a rewrite to be type-safe, which I won't be doing now
+        # TODO: this needs a rewrite to be type-safe, which I won't be doing now
+        return result  # type: ignore
     except (struct.error, UnicodeDecodeError):
         return None
     finally:
