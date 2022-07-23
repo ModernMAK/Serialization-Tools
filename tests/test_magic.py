@@ -21,17 +21,33 @@ _StringCode = "s"
 _CharCode = "c"
 _SIZES = [1, 2, 4, 8, 16]
 
-_INTS = [Struct(f"{e_code}{s_code}") for e_code, s_code in itertools.product(_EndianAlignCodes, _IntCodes)]
-_FLOATS = [Struct(f"{e_code}{s_code}") for e_code, s_code in itertools.product(_EndianAlignCodes, _FloatCodes)]
-_STRINGS = {size: [Struct(f"{e_code}{size}{_StringCode}") for e_code in _EndianAlignCodes] for size in _SIZES}
-_INT_SAMPLES = [0,15,63,127]
-_FLOAT_SAMPLES = [0.0,0.5,1,1.5]
-_RAW_STRING_SAMPLES = [b"My Magic Word\0\0\0", b"\xde\xad\xbe\xed\0\0\0\0\xde\xad\xbe\xed\0\0\0\0", b"dead-beef. abba!", b"The quick brown."]
+_INTS = [
+    Struct(f"{e_code}{s_code}")
+    for e_code, s_code in itertools.product(_EndianAlignCodes, _IntCodes)
+]
+_FLOATS = [
+    Struct(f"{e_code}{s_code}")
+    for e_code, s_code in itertools.product(_EndianAlignCodes, _FloatCodes)
+]
+_STRINGS = {
+    size: [Struct(f"{e_code}{size}{_StringCode}") for e_code in _EndianAlignCodes]
+    for size in _SIZES
+}
+_INT_SAMPLES = [0, 15, 63, 127]
+_FLOAT_SAMPLES = [0.0, 0.5, 1, 1.5]
+_RAW_STRING_SAMPLES = [
+    b"My Magic Word\0\0\0",
+    b"\xde\xad\xbe\xed\0\0\0\0\xde\xad\xbe\xed\0\0\0\0",
+    b"dead-beef. abba!",
+    b"The quick brown.",
+]
 _STRING_SAMPLES = {size: [s[:size] for s in _RAW_STRING_SAMPLES] for size in _SIZES}
 
 _INTS_AND_DATA = itertools.product(_INTS, _INT_SAMPLES)
 _FLOATS_AND_DATA = itertools.product(_FLOATS, _FLOAT_SAMPLES)
-_STRINGS_AND_DATA = [itertools.product(_STRINGS[size], _STRING_SAMPLES[size]) for size in _SIZES]
+_STRINGS_AND_DATA = [
+    itertools.product(_STRINGS[size], _STRING_SAMPLES[size]) for size in _SIZES
+]
 
 _LAYOUTS_AND_DATA = [*_INTS_AND_DATA, *_FLOATS_AND_DATA]
 for _STRING_AND_DATA in _STRINGS_AND_DATA:
@@ -39,11 +55,10 @@ for _STRING_AND_DATA in _STRINGS_AND_DATA:
 
 
 def garbagify(layout: Struct, data: Any):
-    return bytes([byte ^ 0xff for byte in layout.pack(data)])
+    return bytes([byte ^ 0xFF for byte in layout.pack(data)])
 
 
 class SharedTestData:
-
     @pytest.fixture(params=_LAYOUTS_AND_DATA)
     def stream_layout_and_result(self, request) -> Tuple[BytesIO, Struct, Any]:
         layout: Struct
@@ -58,7 +73,6 @@ class SharedTestData:
 
 
 class TestModule(SharedTestData):
-
     def test_read_magic_word(self, stream_layout_and_result, advance: bool):
         stream, layout, data = stream_layout_and_result
 
@@ -76,7 +90,9 @@ class TestModule(SharedTestData):
         try:
             m.assert_magic_word(stream, layout, data, advance)
         except AssertionError:
-            raise AssertionError("The stream asserted that the magic word did not match, when it should have.")
+            raise AssertionError(
+                "The stream asserted that the magic word did not match, when it should have."
+            )
         end = stream.tell()
         assert_advance(start, end, advance)
 
@@ -89,7 +105,9 @@ class TestModule(SharedTestData):
         except AssertionError:
             pass
         else:
-            raise AssertionError("The stream asserted that the magic word matched, when it shouldn't have.")
+            raise AssertionError(
+                "The stream asserted that the magic word matched, when it shouldn't have."
+            )
         end = stream.tell()
         assert_advance(start, end, advance)
 
@@ -148,7 +166,9 @@ class TestMagicWord(SharedTestData):
         try:
             magic.assert_magic_word(stream, advance)
         except AssertionError:
-            raise AssertionError("The stream asserted that the magic word did not match, when it should have.")
+            raise AssertionError(
+                "The stream asserted that the magic word did not match, when it should have."
+            )
         end = stream.tell()
         assert_advance(start, end, advance)
 
@@ -162,7 +182,9 @@ class TestMagicWord(SharedTestData):
         except AssertionError:
             pass
         else:
-            raise AssertionError("The stream asserted that the magic word matched, when it shouldn't have.")
+            raise AssertionError(
+                "The stream asserted that the magic word matched, when it shouldn't have."
+            )
         end = stream.tell()
         assert_advance(start, end, advance)
 
@@ -225,4 +247,3 @@ class TestMagicWordIO(TestMagicWord):
         end = stream.tell()
         assert not result
         assert_advance(start, end, advance)
-

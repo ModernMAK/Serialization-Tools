@@ -11,16 +11,16 @@ __STRUCT_CHARS = r"cbB?hHiIlLqQnNefdpPs"
 __VSTRUCT_CHARS = __STRUCT_CHARS + r"Vv"
 
 INT_MIN_MAX = {
-    "b": (-(2 ** 7), (2 ** 7) - 1),
-    "B": (0, (2 ** 8) - 1),
-    "h": (-(2 ** 15), (2 ** 15) - 1),
-    "H": (0, (2 ** 16) - 1),
-    "i": (-(2 ** 31), (2 ** 31) - 1),
-    "I": (0, (2 ** 32) - 1),
-    "l": (-(2 ** 31), (2 ** 31) - 1),
-    "L": (0, (2 ** 32) - 1),
-    "q": (-(2 ** 63), (2 ** 63) - 1),
-    "Q": (0, (2 ** 64) - 1),
+    "b": (-(2**7), (2**7) - 1),
+    "B": (0, (2**8) - 1),
+    "h": (-(2**15), (2**15) - 1),
+    "H": (0, (2**16) - 1),
+    "i": (-(2**31), (2**31) - 1),
+    "I": (0, (2**32) - 1),
+    "l": (-(2**31), (2**31) - 1),
+    "L": (0, (2**32) - 1),
+    "q": (-(2**63), (2**63) - 1),
+    "Q": (0, (2**64) - 1),
 }
 BOOL_MAP = {True: b"\x01", False: b"\x00"}
 NATIVE_INT_MIN_MAX = {
@@ -28,7 +28,18 @@ NATIVE_INT_MIN_MAX = {
     "N": INT_MIN_MAX["I"],
 }
 
-WORDS = ["The Quick Brown Dog Jumped Over The Lazy Fox", "The", "Quick", "Brown", "Dog", "Jumped", "Over", "The", "Lazy", "Fox"]
+WORDS = [
+    "The Quick Brown Dog Jumped Over The Lazy Fox",
+    "The",
+    "Quick",
+    "Brown",
+    "Dog",
+    "Jumped",
+    "Over",
+    "The",
+    "Lazy",
+    "Fox",
+]
 
 
 def data_generator(c: str, l: int = None) -> Iterable[Any]:
@@ -51,7 +62,7 @@ def data_generator(c: str, l: int = None) -> Iterable[Any]:
             PRIMES = [19, 17, 13, 11, 7, 5, 3]
             # For variety, longer arrays check for different primes
             for p in PRIMES:
-                if l > p ** 2:
+                if l > p**2:
                     flag = (i % p) == 0
                     break
             yield flag
@@ -62,7 +73,9 @@ def data_generator(c: str, l: int = None) -> Iterable[Any]:
             yield min_val + step * i
     elif c in ["e", "f", "d"]:
         for i in range(l):
-            yield 2 * (i / (l - 1 if (l > 1) else 1)) - 1  # [-1f,1f], we could use larger values but this range is simple
+            yield 2 * (
+                i / (l - 1 if (l > 1) else 1)
+            ) - 1  # [-1f,1f], we could use larger values but this range is simple
     elif c in _VarLenStruct.SPECIAL:
         gen = WORDS
         gen_enc = [g.encode("ascii") for g in gen]
@@ -99,7 +112,7 @@ def shared_test_unpack(unpack_func: Callable[[str, List, bytes], Tuple[Any, ...]
         for src, res in zip(data, result):
             f = fmt[-1]
             if f in ["f", "e", "d"]:
-                closeness = {'e': 0.001, 'f': 0.00001, 'd': 0.000000001}
+                closeness = {"e": 0.001, "f": 0.00001, "d": 0.000000001}
                 assert math.isclose(src, res, rel_tol=closeness[f])
             else:
                 assert src == res
@@ -120,7 +133,9 @@ class TestModule:
         shared_test_unpack(do_unpack)
 
     def test_unpack_from(self):
-        shared_test_unpack(lambda fmt, data, buffer: vstruct.unpack_from(fmt, buffer, 0))
+        shared_test_unpack(
+            lambda fmt, data, buffer: vstruct.unpack_from(fmt, buffer, 0)
+        )
 
     def test_unpack(self):
         shared_test_unpack(lambda fmt, data, buffer: vstruct.unpack(fmt, buffer))
@@ -155,10 +170,12 @@ class TestVStruct:
         shared_test_unpack(do_unpack)
 
     def test_unpack_from(self):
-        shared_test_unpack(lambda fmt, data, buffer: VStruct(fmt).unpack_from(buffer, 0))
+        shared_test_unpack(
+            lambda fmt, data, buffer: VStruct(fmt).unpack_from(buffer, 0)
+        )
 
     def test_unpack(self):
-        shared_test_unpack(lambda fmt, data, buffer: VStruct(fmt).unpack( buffer))
+        shared_test_unpack(lambda fmt, data, buffer: VStruct(fmt).unpack(buffer))
 
     def test_pack_stream(self):
         def do_pack(fmt: str, data: List, buffer: bytes):
