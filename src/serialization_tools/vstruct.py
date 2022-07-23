@@ -2,24 +2,65 @@ import re
 import struct
 from typing import BinaryIO, Tuple, Any, Iterator, List, Dict
 
-from . import structx
-from .ioutil import as_hex_adr, BinaryWindow
-from .structx import Struct, _StructFormat, _BufferFormat
+from serialization_tools import structx
+from serialization_tools.error import packing_args_error
+from serialization_tools.ioutil import as_hex_adr, BinaryWindow
+from serialization_tools.structx import Struct, _StructFormat, _BufferFormat
 
 WriteableBuffer = ReadableBuffer = _BufferFormat
 
 _UInt32 = Struct("I")
 
 
+def pack(__format: _StructFormat, *args: Any) -> bytes:
+    if any((c in __format) for c in _VarLenStruct.SPECIAL):
+        temp = VStruct(__format)
+        return temp.pack(*args)
+    else:
+        return structx.pack(__format, *args)
+
+
+def unpack(__format: _StructFormat, __buffer: bytes) -> Tuple[Any, ...]:
+    if any((c in __format) for c in _VarLenStruct.SPECIAL):
+        temp = VStruct(__format)
+        return temp.unpack(__buffer)
+    else:
+        return structx.unpack(__format, __buffer)
+
+
+def pack_into(__format: _StructFormat, __buffer: _BufferFormat, offset:int, *args) -> int:
+    if any((c in __format) for c in _VarLenStruct.SPECIAL):
+        temp = VStruct(__format)
+        return temp.pack_into(__buffer, offset, *args)
+    else:
+        return structx.pack_into(__format, __buffer, offset, *args)
+
+
+def unpack_from(__format: _StructFormat, __buffer: _BufferFormat, offset: int) -> Tuple[Any, ...]:
+    if any((c in __format) for c in _VarLenStruct.SPECIAL):
+        temp = VStruct(__format)
+        return temp.unpack_from(__buffer, offset)
+    else:
+        return structx.unpack_from(__format, __buffer, offset)
+
+
+def pack_stream(__format: _StructFormat, __stream: BinaryIO, *args) -> int:
+    if any((c in __format) for c in _VarLenStruct.SPECIAL):
+        temp = VStruct(__format)
+        return temp.pack_stream(__stream, *args)
+    else:
+        return structx.pack_stream(__format, __stream, *args)
+
+
 def unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Tuple[Any, ...]:
-    raise NotImplementedError
+    if any((c in __format) for c in _VarLenStruct.SPECIAL):
+        temp = VStruct(__format)
+        return temp.unpack_stream(__stream)
+    else:
+        return structx.unpack_stream(__format, __stream)
 
 
 def iter_unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Iterator[Tuple[Any, ...]]:
-    raise NotImplementedError
-
-
-def pack_stream(fmt: _StructFormat, __stream: BinaryIO, *v) -> int:
     raise NotImplementedError
 
 
@@ -114,7 +155,7 @@ class _VarLenStruct(structx.Struct):
             r = bytearray()
             for val in v:
                 if not isinstance(val, (bytes, bytearray)):
-                    raise ValueError
+                    raise ValueError(f"{type(val)} is not in `[bytes, bytearray]`")
                 v_len = s_layout.pack(len(val))
                 r.extend(v_len)
                 r.extend(val)
@@ -284,12 +325,43 @@ class VStruct:
                 else:
                     break  # End of Stream; job's done
 
+    def _multi_pack(self, *v) -> bytes:
+        v_offset = 0
+        parts = []
+        for sub in self.__multi_layout:
+            sub_v = v[v_offset:v_offset + sub.args]
+            v_offset += sub.args
+
+            packed = sub.pack(*sub_v)
+            parts.extend(packed)
+        return b"".join(parts)
+
+    def pack(self, *v) -> bytes:
+        if self.__layout:
+            return self.__layout.pack(*v)
+        else:
+            if len(v) != self.args:
+                raise packing_args_error(self.__class__, self.pack, len(v), self.args)
+            else:
+                return self._multi_pack(*v)
+
+    def pack_into(self, __buffer: _BufferFormat, offset: int, *v):
+        if self.__layout:
+            packed = self.__layout.pack(*v)
+        else:
+            if len(v) != self.args:
+                raise packing_args_error(self.__class__, self.pack_into, len(v), self.args)
+            else:
+                packed = self._multi_pack(*v)
+
+        __buffer[offset:offset + len(packed)] = packed
+
     def pack_stream(self, __stream: BinaryIO, *v) -> int:
         if self.__layout:
             return self.__layout.pack_stream(__stream, *v)
         else:
             if len(v) != self.args:
-                raise struct.error(f"pack_stream expected {self.args} items for packing (got {len(v)})")
+                raise packing_args_error(self.__class__, self.pack_stream, len(v), self.args)
 
             written = 0
             offset = 0

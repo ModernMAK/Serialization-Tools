@@ -10,14 +10,22 @@ from typing import Union, BinaryIO, Tuple, Any, Iterator, List
 _StructFormat = Union[str, bytes]
 _BufferFormat = Union[bytes, bytearray, memoryview, array, mmap]
 
-Byte = struct.Struct("c")
-UInt32 = struct.Struct("I")
+_Byte = struct.Struct("c")
+_UInt32 = struct.Struct("I")
 
 
 def unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Tuple[Any, ...]:
     size = calcsize(__format)
     buffer = __stream.read(size)
     return unpack(__format, buffer)
+
+
+unpack_from = struct.unpack_from
+
+
+def pack_into(fmt: str, buffer: _BufferFormat, offset: int, *args) -> int:
+    struct.pack_into(fmt, buffer, offset, *args)
+    return calcsize(fmt)
 
 
 def iter_unpack_stream(__format: _StructFormat, __stream: BinaryIO) -> Iterator[Tuple[Any, ...]]:
@@ -37,20 +45,20 @@ def pack_stream(fmt: _StructFormat, __stream: BinaryIO, *v) -> int:
     return __stream.write(buffer)
 
 
-def unpack_len_encoded_bytes(buffer: _BufferFormat, length_layout: _StructFormat = UInt32, data_layout: _StructFormat = Byte) -> bytes:
+def unpack_len_encoded_bytes(buffer: _BufferFormat, length_layout: _StructFormat = _UInt32, data_layout: _StructFormat = _Byte) -> bytes:
     len_size = struct.calcsize(length_layout)
     data_size = struct.calcsize(data_layout)
     count: int = struct.unpack(length_layout, buffer)[0]
     return struct.unpack_from(f"{count * data_size}s", buffer, len_size)[0]
 
 
-def pack_len_encoded_bytes(value: bytes, length_layout: _StructFormat = UInt32) -> bytes:
+def pack_len_encoded_bytes(value: bytes, length_layout: _StructFormat = _UInt32) -> bytes:
     count: int = len(value)
     len_buffer = struct.pack(length_layout, count)
     return len_buffer + value
 
 
-def unpack_len_encoded(buffer: _BufferFormat, length_layout: _StructFormat = UInt32, data_layout: _StructFormat = Byte) -> Tuple[Tuple[Any, ...], ...]:
+def unpack_len_encoded(buffer: _BufferFormat, length_layout: _StructFormat = _UInt32, data_layout: _StructFormat = _Byte) -> Tuple[Tuple[Any, ...], ...]:
     len_size = struct.calcsize(length_layout)
     data_size = struct.calcsize(data_layout)
 
@@ -59,7 +67,7 @@ def unpack_len_encoded(buffer: _BufferFormat, length_layout: _StructFormat = UIn
     return tuple(items)
 
 
-def pack_len_encoded(self, value: List, data_layout: _StructFormat, length_layout: _StructFormat = UInt32) -> bytes:
+def pack_len_encoded(self, value: List, data_layout: _StructFormat, length_layout: _StructFormat = _UInt32) -> bytes:
     count: int = len(value)
     buffer = bytearray(struct.pack(length_layout, count))
     for item in value:
@@ -67,12 +75,12 @@ def pack_len_encoded(self, value: List, data_layout: _StructFormat, length_layou
     return buffer
 
 
-def unpack_len_encoded_str(buffer: _BufferFormat, length_layout: _StructFormat = UInt32, encoding: str = None) -> str:
+def unpack_len_encoded_str(buffer: _BufferFormat, length_layout: _StructFormat = _UInt32, encoding: str = None) -> str:
     buffer = unpack_len_encoded_bytes(buffer, length_layout)
     return buffer.decode(encoding)
 
 
-def pack_len_encoded_str(value: str, length_layout: _StructFormat = UInt32, encoding: str = None) -> bytes:
+def pack_len_encoded_str(value: str, length_layout: _StructFormat = _UInt32, encoding: str = None) -> bytes:
     buffer = value.encode(encoding)
     len_buffer = struct.pack(length_layout, len(buffer))
     return len_buffer + buffer
